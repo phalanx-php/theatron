@@ -67,7 +67,7 @@ final class StyleTest extends TestCase
 
         $result = $base->patch($overlay);
 
-        self::assertNotNull($result->size);
+        self::assertSame($base->size, $result->size);
         self::assertSame(Align::Center, $result->align);
         self::assertSame(Border::Single, $result->border);
         self::assertNotNull($result->color);

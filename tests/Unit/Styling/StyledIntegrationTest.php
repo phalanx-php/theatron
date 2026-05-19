@@ -57,8 +57,8 @@ final class StyledIntegrationTest extends TestCase
     #[Test]
     public function stylesheetBackgroundFillAppliesToEmptyCells(): void
     {
-        $sheetStyle = Style::of(background: Color::hex('#333333'));
-        $sheet = Stylesheet::of(['text' => $sheetStyle]);
+        $bg = Color::hex('#333333');
+        $sheet = Stylesheet::of(['text' => Style::of(background: $bg)]);
 
         $buf = Buffer::empty(20, 1);
         $ctx = new PaintContext(Rect::sized(20, 1), $buf, $sheet);
@@ -68,6 +68,7 @@ final class StyledIntegrationTest extends TestCase
 
         $filledCell = $buf->get(10, 0);
         self::assertNotNull($filledCell->style->background);
+        self::assertTrue($filledCell->style->background->equals($bg));
     }
 
     #[Test]
@@ -149,7 +150,7 @@ final class StyledIntegrationTest extends TestCase
     #[Test]
     public function painterPropagatesStylesheetFromMountedComponent(): void
     {
-        $component = new OlympianStyledComponent();
+        $component = new OlympianBgStyledComponent();
         $batch = new DirtyBatch();
         $scanResult = SignalScanner::scan($component, $batch);
         $mounted = new MountedComponent($component, $batch, $scanResult);
@@ -164,7 +165,54 @@ final class StyledIntegrationTest extends TestCase
         $paintCtx = new PaintContext(Rect::sized(20, 1), $buf);
         Painter::paint($mounted, $paintCtx);
 
-        self::assertSame('O', $buf->get(0, 0)->char);
+        self::assertSame('S', $buf->get(0, 0)->char);
+        $emptyCell = $buf->get(10, 0);
+        self::assertNotNull($emptyCell->style->background);
+        self::assertTrue($emptyCell->style->background->equals(Color::hex('#222222')));
+    }
+
+    #[Test]
+    public function stylesheetInvalidatesOnThemeChange(): void
+    {
+        $component = new OlympianStyledComponent();
+        $batch = new DirtyBatch();
+        $scanResult = SignalScanner::scan($component, $batch);
+        $mounted = new MountedComponent($component, $batch, $scanResult);
+
+        $scope = $this->createStub(\Phalanx\Scope\Scope::class);
+        $mountSystem = new MountSystem($scope);
+
+        $theme1 = Theme::default();
+        $ctx1 = new RenderContext($scope, new Ui(), $theme1, $mountSystem);
+        $mounted->render($ctx1);
+        $first = $mounted->stylesheet();
+
+        $theme2 = Theme::default();
+        $ctx2 = new RenderContext($scope, new Ui(), $theme2, $mountSystem);
+        $mounted->markDirty();
+        $mounted->render($ctx2);
+        $second = $mounted->stylesheet();
+
+        self::assertNotSame($first, $second);
+    }
+
+    #[Test]
+    public function disposedComponentClearsStylesheet(): void
+    {
+        $component = new OlympianStyledComponent();
+        $batch = new DirtyBatch();
+        $scanResult = SignalScanner::scan($component, $batch);
+        $mounted = new MountedComponent($component, $batch, $scanResult);
+
+        $scope = $this->createStub(\Phalanx\Scope\Scope::class);
+        $mountSystem = new MountSystem($scope);
+        $ctx = new RenderContext($scope, new Ui(), Theme::default(), $mountSystem);
+
+        $mounted->render($ctx);
+        self::assertNotNull($mounted->stylesheet());
+
+        $mounted->dispose();
+        self::assertNull($mounted->stylesheet());
     }
 
     protected function tearDown(): void
@@ -184,6 +232,21 @@ final class OlympianStyledComponent implements Component, Styled
     {
         return Stylesheet::of([
             'text' => Style::of(color: $theme->fg),
+        ]);
+    }
+}
+
+final class OlympianBgStyledComponent implements Component, Styled
+{
+    public function __invoke(RenderContext $ctx): Renderable
+    {
+        return $ctx->ui->text('Sparta');
+    }
+
+    public function stylesheet(Theme $theme): Stylesheet
+    {
+        return Stylesheet::of([
+            'text' => Style::of(background: Color::hex('#222222')),
         ]);
     }
 }

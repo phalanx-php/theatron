@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Phalanx\Theatron\Tests\Unit\Styling;
 
+use Phalanx\Theatron\Style\Color;
 use Phalanx\Theatron\Style\Modifier;
 use Phalanx\Theatron\Styling\BBCode;
 use Phalanx\Theatron\Styling\Theme;
@@ -60,23 +61,25 @@ final class BBCodeTest extends TestCase
     }
 
     #[Test]
-    public function namedSemanticTag(): void
+    public function namedSemanticTagMatchesThemeForeground(): void
     {
         $line = BBCode::parse('[accent]text[/]', $this->theme);
 
         self::assertCount(1, $line->spans);
         self::assertSame('text', $line->spans[0]->content);
         self::assertNotNull($line->spans[0]->style->foreground);
+        self::assertTrue($line->spans[0]->style->foreground->equals(Color::hex('#88ccff')));
     }
 
     #[Test]
-    public function hexColorTag(): void
+    public function hexColorTagMatchesExactColor(): void
     {
         $line = BBCode::parse('[#ff0000]red[/]', $this->theme);
 
         self::assertCount(1, $line->spans);
         self::assertSame('red', $line->spans[0]->content);
         self::assertNotNull($line->spans[0]->style->foreground);
+        self::assertTrue($line->spans[0]->style->foreground->equals(Color::hex('#ff0000')));
     }
 
     #[Test]
@@ -194,13 +197,14 @@ final class BBCodeTest extends TestCase
     }
 
     #[Test]
-    public function emptyTagIgnored(): void
+    public function emptyTagFlushesSpanWithoutStyleChange(): void
     {
         $line = BBCode::parse('text[]more', $this->theme);
 
         self::assertCount(2, $line->spans);
         self::assertSame('text', $line->spans[0]->content);
         self::assertSame('more', $line->spans[1]->content);
+        self::assertTrue($line->spans[0]->style->equals($line->spans[1]->style));
     }
 
     #[Test]
@@ -247,5 +251,47 @@ final class BBCodeTest extends TestCase
 
         $text = implode('', array_map(static fn ($s) => $s->content, $line->spans));
         self::assertSame('text', $text);
+    }
+
+    #[Test]
+    public function leadingCloseTagDoesNotCrash(): void
+    {
+        $line = BBCode::parse('[/]text', $this->theme);
+
+        self::assertCount(1, $line->spans);
+        self::assertSame('text', $line->spans[0]->content);
+    }
+
+    #[Test]
+    public function deeplyNestedModifiersUnwindCorrectly(): void
+    {
+        $line = BBCode::parse('[bold][italic][underline]deep[/]mid[/]outer[/]plain', $this->theme);
+
+        self::assertCount(4, $line->spans);
+        self::assertSame('deep', $line->spans[0]->content);
+        self::assertTrue($line->spans[0]->style->hasModifier(Modifier::Bold));
+        self::assertTrue($line->spans[0]->style->hasModifier(Modifier::Italic));
+        self::assertTrue($line->spans[0]->style->hasModifier(Modifier::Underline));
+
+        self::assertSame('mid', $line->spans[1]->content);
+        self::assertTrue($line->spans[1]->style->hasModifier(Modifier::Bold));
+        self::assertTrue($line->spans[1]->style->hasModifier(Modifier::Italic));
+        self::assertFalse($line->spans[1]->style->hasModifier(Modifier::Underline));
+
+        self::assertSame('outer', $line->spans[2]->content);
+        self::assertTrue($line->spans[2]->style->hasModifier(Modifier::Bold));
+        self::assertFalse($line->spans[2]->style->hasModifier(Modifier::Italic));
+
+        self::assertSame('plain', $line->spans[3]->content);
+        self::assertTrue($line->spans[3]->style->isEmpty);
+    }
+
+    #[Test]
+    public function partialTagAtEndLosesTagContent(): void
+    {
+        $line = BBCode::parse('hello[bold', $this->theme);
+
+        $text = implode('', array_map(static fn ($s) => $s->content, $line->spans));
+        self::assertSame('hello', $text);
     }
 }

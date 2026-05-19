@@ -136,5 +136,7 @@ final class MountedComponent implements Renderable
 
         $this->lastResult = null;
         $this->renderCtx = null;
+        $this->cachedStylesheet = null;
+        $this->cachedTheme = null;
     }
 }

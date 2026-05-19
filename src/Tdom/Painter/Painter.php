@@ -41,8 +41,9 @@ final class Painter
             }
             $inner = $node->lastResult();
             if ($inner !== null) {
-                $childCtx = $node->stylesheet() !== null
-                    ? new PaintContext($ctx->area, $ctx->buffer, $node->stylesheet())
+                $sheet = $node->stylesheet();
+                $childCtx = $sheet !== null
+                    ? new PaintContext($ctx->area, $ctx->buffer, $sheet)
                     : $ctx;
                 self::paint($inner, $childCtx);
             }

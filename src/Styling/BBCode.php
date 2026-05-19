@@ -110,6 +110,8 @@ final class BBCode
                     $i += 2;
                     continue;
                 }
+                $i++;
+                continue;
             }
 
             if (str_starts_with($token, '#')) {

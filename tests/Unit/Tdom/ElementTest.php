@@ -177,7 +177,7 @@ final class ElementTest extends TestCase
     }
 
     #[Test]
-    public function textWithThemeSkipsBBCodeWhenNoBrackets(): void
+    public function plainTextWithoutMarkupRemainsString(): void
     {
         $ui = new Ui(Theme::default());
 

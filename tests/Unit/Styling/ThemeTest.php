@@ -7,7 +7,6 @@ namespace Phalanx\Theatron\Tests\Unit\Styling;
 use Phalanx\Theatron\Layout\Border;
 use Phalanx\Theatron\Style\Color;
 use Phalanx\Theatron\Style\Modifier;
-use Phalanx\Theatron\Style\Style as AnsiStyle;
 use Phalanx\Theatron\Styling\Theme;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -15,26 +14,30 @@ use PHPUnit\Framework\TestCase;
 final class ThemeTest extends TestCase
 {
     #[Test]
-    public function surfaceColorsAreSet(): void
+    public function surfaceColorsPinned(): void
     {
         $theme = Theme::default();
 
-        self::assertInstanceOf(Color::class, $theme->fg);
-        self::assertInstanceOf(Color::class, $theme->bg);
-        self::assertInstanceOf(Color::class, $theme->surface);
-        self::assertInstanceOf(Color::class, $theme->border);
-        self::assertInstanceOf(Color::class, $theme->highlight);
+        self::assertTrue($theme->fg->equals(Color::hex('#e0e0e0')));
+        self::assertTrue($theme->bg->equals(Color::hex('#1a1a1a')));
+        self::assertTrue($theme->surface->equals(Color::hex('#2a2a2a')));
+        self::assertTrue($theme->border->equals(Color::hex('#404040')));
+        self::assertTrue($theme->highlight->equals(Color::hex('#333333')));
     }
 
     #[Test]
-    public function textHierarchyStylesAreSet(): void
+    public function textHierarchyForegroundsPinned(): void
     {
         $theme = Theme::default();
 
-        self::assertInstanceOf(AnsiStyle::class, $theme->default);
-        self::assertInstanceOf(AnsiStyle::class, $theme->muted);
-        self::assertInstanceOf(AnsiStyle::class, $theme->subtle);
-        self::assertInstanceOf(AnsiStyle::class, $theme->bright);
+        self::assertNotNull($theme->default->foreground);
+        self::assertTrue($theme->default->foreground->equals(Color::hex('#e0e0e0')));
+        self::assertNotNull($theme->muted->foreground);
+        self::assertTrue($theme->muted->foreground->equals(Color::hex('#707070')));
+        self::assertNotNull($theme->subtle->foreground);
+        self::assertTrue($theme->subtle->foreground->equals(Color::hex('#909090')));
+        self::assertNotNull($theme->bright->foreground);
+        self::assertTrue($theme->bright->foreground->equals(Color::hex('#ffffff')));
     }
 
     #[Test]
@@ -46,14 +49,51 @@ final class ThemeTest extends TestCase
     }
 
     #[Test]
-    public function semanticAccentsResolve(): void
+    public function semanticAccentsPinned(): void
     {
         $theme = Theme::default();
-        $accent = $theme->resolve('accent');
 
+        self::assertNotNull($theme->accent->foreground);
+        self::assertTrue($theme->accent->foreground->equals(Color::hex('#88ccff')));
+        self::assertNotNull($theme->success->foreground);
+        self::assertTrue($theme->success->foreground->equals(Color::hex('#77cc77')));
+        self::assertNotNull($theme->warning->foreground);
+        self::assertTrue($theme->warning->foreground->equals(Color::hex('#ccaa55')));
+        self::assertNotNull($theme->error->foreground);
+        self::assertTrue($theme->error->foreground->equals(Color::hex('#cc6666')));
+        self::assertNotNull($theme->info->foreground);
+        self::assertTrue($theme->info->foreground->equals(Color::hex('#88aacc')));
+        self::assertNotNull($theme->hint->foreground);
+        self::assertTrue($theme->hint->foreground->equals(Color::hex('#606060')));
+    }
+
+    #[Test]
+    public function activeStylePinned(): void
+    {
+        $theme = Theme::default();
+
+        self::assertNotNull($theme->active->foreground);
+        self::assertTrue($theme->active->foreground->equals(Color::hex('#ffffff')));
+        self::assertNotNull($theme->active->background);
+        self::assertTrue($theme->active->background->equals(Color::hex('#333333')));
+    }
+
+    #[Test]
+    public function resolveReturnsMatchingSemanticStyle(): void
+    {
+        $theme = Theme::default();
+
+        $accent = $theme->resolve('accent');
         self::assertNotNull($accent);
-        self::assertInstanceOf(AnsiStyle::class, $accent);
         self::assertTrue($accent->equals($theme->accent));
+
+        $success = $theme->resolve('success');
+        self::assertNotNull($success);
+        self::assertTrue($success->equals($theme->success));
+
+        $error = $theme->resolve('error');
+        self::assertNotNull($error);
+        self::assertTrue($error->equals($theme->error));
     }
 
     #[Test]
@@ -78,13 +118,27 @@ final class ThemeTest extends TestCase
     }
 
     #[Test]
-    public function resolveModifierReturnsBoldStyle(): void
+    public function resolveAllSixModifiers(): void
     {
         $theme = Theme::default();
-        $bold = $theme->resolve('bold');
 
-        self::assertNotNull($bold);
-        self::assertTrue($bold->hasModifier(Modifier::Bold));
+        $modifiers = [
+            'bold' => Modifier::Bold,
+            'dim' => Modifier::Dim,
+            'italic' => Modifier::Italic,
+            'underline' => Modifier::Underline,
+            'reverse' => Modifier::Reverse,
+            'strikethrough' => Modifier::Strikethrough,
+        ];
+
+        foreach ($modifiers as $name => $modifier) {
+            $resolved = $theme->resolve($name);
+            self::assertNotNull($resolved, "resolve('{$name}') returned null");
+            self::assertTrue(
+                $resolved->hasModifier($modifier),
+                "resolve('{$name}') missing expected modifier",
+            );
+        }
     }
 
     #[Test]
@@ -93,6 +147,8 @@ final class ThemeTest extends TestCase
         $theme = Theme::default();
 
         self::assertSame(Border::Single, $theme->panel->border);
+        self::assertNotNull($theme->panel->color);
+        self::assertTrue($theme->panel->color->equals(Color::hex('#404040')));
     }
 
     #[Test]
@@ -101,26 +157,8 @@ final class ThemeTest extends TestCase
         $theme = Theme::default();
 
         self::assertSame(Border::Rounded, $theme->input->border);
-    }
-
-    #[Test]
-    public function activeStyleHasBackground(): void
-    {
-        $theme = Theme::default();
-
-        self::assertNotNull($theme->active->background);
-    }
-
-    #[Test]
-    public function defaultThemePinsKnownValues(): void
-    {
-        $theme = Theme::default();
-
-        self::assertTrue($theme->fg->equals(Color::hex('#e0e0e0')));
-        self::assertNotNull($theme->accent->foreground);
-        self::assertTrue($theme->accent->foreground->equals(Color::hex('#88ccff')));
-        self::assertNotNull($theme->error->foreground);
-        self::assertTrue($theme->error->foreground->equals(Color::hex('#cc6666')));
+        self::assertNotNull($theme->input->background);
+        self::assertTrue($theme->input->background->equals(Color::hex('#2a2a2a')));
     }
 
     #[Test]
@@ -128,9 +166,7 @@ final class ThemeTest extends TestCase
     {
         $theme = Theme::default();
 
-        $first = $theme->resolve('bold');
-        $second = $theme->resolve('bold');
-
-        self::assertSame($first, $second);
+        self::assertSame($theme->resolve('bold'), $theme->resolve('bold'));
+        self::assertSame($theme->resolve('italic'), $theme->resolve('italic'));
     }
 }

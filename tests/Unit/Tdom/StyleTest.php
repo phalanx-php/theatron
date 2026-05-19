@@ -58,4 +58,71 @@ final class StyleTest extends TestCase
         self::assertNotNull($style->color);
         self::assertTrue($style->color->equals(Color::green()));
     }
+
+    #[Test]
+    public function patchOverlaysNonNullFields(): void
+    {
+        $base    = Style::of(size: Size::fixed(10), border: Border::Single);
+        $overlay = Style::of(align: Align::Center, color: Color::red());
+
+        $result = $base->patch($overlay);
+
+        self::assertNotNull($result->size);
+        self::assertSame(Align::Center, $result->align);
+        self::assertSame(Border::Single, $result->border);
+        self::assertNotNull($result->color);
+        self::assertTrue($result->color->equals(Color::red()));
+    }
+
+    #[Test]
+    public function patchOverlayWinsOnConflict(): void
+    {
+        $base    = Style::of(border: Border::Single);
+        $overlay = Style::of(border: Border::Rounded);
+
+        $result = $base->patch($overlay);
+
+        self::assertSame(Border::Rounded, $result->border);
+    }
+
+    #[Test]
+    public function patchWithEmptyOverlayReturnsSameValues(): void
+    {
+        $base   = Style::of(size: Size::fixed(20), align: Align::End, padding: Padding::all(2));
+        $result = $base->patch(Style::of());
+
+        self::assertSame($base->size, $result->size);
+        self::assertSame(Align::End, $result->align);
+        self::assertSame($base->padding, $result->padding);
+        self::assertNull($result->color);
+        self::assertNull($result->background);
+    }
+
+    #[Test]
+    public function patchWithEmptyBaseReturnsOverlay(): void
+    {
+        $overlay = Style::of(border: Border::Heavy, color: Color::blue(), background: Color::red());
+        $result  = Style::of()->patch($overlay);
+
+        self::assertSame(Border::Heavy, $result->border);
+        self::assertNotNull($result->color);
+        self::assertTrue($result->color->equals(Color::blue()));
+        self::assertNotNull($result->background);
+        self::assertTrue($result->background->equals(Color::red()));
+        self::assertNull($result->size);
+        self::assertNull($result->align);
+        self::assertNull($result->padding);
+    }
+
+    #[Test]
+    public function patchChainLastOverlayWins(): void
+    {
+        $result = Style::of(border: Border::Single)
+            ->patch(Style::of(color: Color::red()))
+            ->patch(Style::of(color: Color::blue()));
+
+        self::assertSame(Border::Single, $result->border);
+        self::assertNotNull($result->color);
+        self::assertTrue($result->color->equals(Color::blue()));
+    }
 }

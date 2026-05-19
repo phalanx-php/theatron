@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Phalanx\Theatron\Tdom;
 
 use Phalanx\Theatron\Layout\Size;
+use Phalanx\Theatron\Styling\BBCode;
+use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Element\ColumnElement;
 use Phalanx\Theatron\Tdom\Element\DividerElement;
 use Phalanx\Theatron\Tdom\Element\GridElement;
@@ -20,8 +22,17 @@ use Phalanx\Theatron\Text\Line;
 
 final class Ui
 {
+    public function __construct(
+        private(set) ?Theme $theme = null,
+    ) {
+    }
+
     public function text(string|Line $content, ?Style $style = null): TextElement
     {
+        if (is_string($content) && $this->theme !== null && str_contains($content, '[')) {
+            $content = BBCode::parse($content, $this->theme);
+        }
+
         return new TextElement($content, $style);
     }
 

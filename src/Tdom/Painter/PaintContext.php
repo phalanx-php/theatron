@@ -6,17 +6,19 @@ namespace Phalanx\Theatron\Tdom\Painter;
 
 use Phalanx\Theatron\Buffer\Buffer;
 use Phalanx\Theatron\Buffer\Rect;
+use Phalanx\Theatron\Styling\Stylesheet;
 
 final class PaintContext
 {
     public function __construct(
         private(set) Rect $area,
         private(set) Buffer $buffer,
+        private(set) ?Stylesheet $stylesheet = null,
     ) {
     }
 
     public function sub(Rect $area): self
     {
-        return new self($area, $this->buffer);
+        return new self($area, $this->buffer, $this->stylesheet);
     }
 }

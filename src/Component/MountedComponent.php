@@ -8,11 +8,14 @@ use Phalanx\Theatron\Context\RenderContext;
 use Phalanx\Theatron\Contract\Component;
 use Phalanx\Theatron\Contract\Disposable as TheatronDisposable;
 use Phalanx\Theatron\Contract\Mountable;
+use Phalanx\Theatron\Contract\Styled;
 use Phalanx\Theatron\Reactive\DirtyBatch;
 use Phalanx\Theatron\Reactive\Signal;
 use Phalanx\Theatron\Reactive\SignalSubscription;
 use Phalanx\Theatron\Reactive\Tracker;
 use Phalanx\Theatron\State\StoreSubscription;
+use Phalanx\Theatron\Styling\Stylesheet;
+use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Tdom\Style;
 
@@ -29,6 +32,8 @@ final class MountedComponent implements Renderable
 
     private ?Renderable $lastResult = null;
     private ?RenderContext $renderCtx = null;
+    private ?Stylesheet $cachedStylesheet = null;
+    private ?Theme $cachedTheme = null;
 
     /** @var list<Signal> */
     private array $ownedSignals;
@@ -59,6 +64,11 @@ final class MountedComponent implements Renderable
         $this->renderCtx = $ctx;
         $this->dirty->consume();
 
+        if ($this->component instanceof Styled && $this->cachedTheme !== $ctx->theme) {
+            $this->cachedStylesheet = $this->component->stylesheet($ctx->theme);
+            $this->cachedTheme = $ctx->theme;
+        }
+
         $frame = Tracker::push();
         try {
             $result = ($this->component)($ctx);
@@ -81,6 +91,11 @@ final class MountedComponent implements Renderable
     public function lastResult(): ?Renderable
     {
         return $this->lastResult;
+    }
+
+    public function stylesheet(): ?Stylesheet
+    {
+        return $this->cachedStylesheet;
     }
 
     public function markDirty(): void

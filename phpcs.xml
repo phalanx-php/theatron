@@ -31,6 +31,8 @@
         <exclude-pattern>*/StoreSubscription.php</exclude-pattern>
         <exclude-pattern>*/StoreTest.php</exclude-pattern>
         <exclude-pattern>*/StoreIntegrationTest.php</exclude-pattern>
+        <exclude-pattern>*/BBCodeTest.php</exclude-pattern>
+        <exclude-pattern>*/StyledIntegrationTest.php</exclude-pattern>
         <exclude-pattern>*/Region.php</exclude-pattern>
         <exclude-pattern>*/Compositor.php</exclude-pattern>
     </rule>

@@ -32,4 +32,16 @@ final class Style
     ): self {
         return new self($size, $align, $border, $padding, $color, $background);
     }
+
+    public function patch(self $other): self
+    {
+        return new self(
+            $other->size ?? $this->size,
+            $other->align ?? $this->align,
+            $other->border ?? $this->border,
+            $other->padding ?? $this->padding,
+            $other->color ?? $this->color,
+            $other->background ?? $this->background,
+        );
+    }
 }

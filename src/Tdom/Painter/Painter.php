@@ -7,6 +7,7 @@ namespace Phalanx\Theatron\Tdom\Painter;
 use Phalanx\Theatron\Buffer\Rect;
 use Phalanx\Theatron\Component\MountedComponent;
 use Phalanx\Theatron\Style\Style as AnsiStyle;
+use Phalanx\Theatron\Styling\Stylesheet;
 use Phalanx\Theatron\Tdom\Element;
 use Phalanx\Theatron\Tdom\Element\ColumnElement;
 use Phalanx\Theatron\Tdom\Element\DividerElement;
@@ -40,7 +41,10 @@ final class Painter
             }
             $inner = $node->lastResult();
             if ($inner !== null) {
-                self::paint($inner, $ctx);
+                $childCtx = $node->stylesheet() !== null
+                    ? new PaintContext($ctx->area, $ctx->buffer, $node->stylesheet())
+                    : $ctx;
+                self::paint($inner, $childCtx);
             }
             return;
         }
@@ -49,13 +53,14 @@ final class Painter
             return;
         }
 
-        $bg = self::resolveBackground($node->style);
+        $effective = self::resolveEffectiveStyle($node, $ctx->stylesheet);
+        $bg = self::resolveBackground($effective);
 
         if ($bg !== null) {
             $ctx->buffer->fill($ctx->area, $bg);
         }
 
-        $padding = $node->style?->padding;
+        $padding = $effective?->padding;
         $paintCtx = $ctx;
 
         if ($padding !== null && !$node instanceof PanelElement) {
@@ -105,6 +110,21 @@ final class Painter
         self::$styleCache = null;
         self::$bgCache = null;
         self::$emptyStyle = null;
+    }
+
+    private static function resolveEffectiveStyle(Element $node, ?Stylesheet $stylesheet): ?TdomStyle
+    {
+        $sheetStyle = $stylesheet?->match($node->type);
+
+        if ($sheetStyle === null) {
+            return $node->style;
+        }
+
+        if ($node->style === null) {
+            return $sheetStyle;
+        }
+
+        return $sheetStyle->patch($node->style);
     }
 
     private static function resolveBackground(?TdomStyle $style): ?AnsiStyle

@@ -7,6 +7,8 @@ namespace Phalanx\Theatron\Tests\Unit\Tdom;
 use Phalanx\Theatron\Layout\Border;
 use Phalanx\Theatron\Layout\Size;
 use Phalanx\Theatron\Style\Color;
+use Phalanx\Theatron\Style\Modifier;
+use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Element\ColumnElement;
 use Phalanx\Theatron\Tdom\Element\DividerElement;
 use Phalanx\Theatron\Tdom\Element\GridElement;
@@ -20,6 +22,7 @@ use Phalanx\Theatron\Tdom\Element\StatusLineElement;
 use Phalanx\Theatron\Tdom\Element\TextElement;
 use Phalanx\Theatron\Tdom\ElementType;
 use Phalanx\Theatron\Tdom\Style;
+use Phalanx\Theatron\Tdom\Ui;
 use Phalanx\Theatron\Text\Line;
 use Phalanx\Theatron\Text\Span;
 use PHPUnit\Framework\Attributes\Test;
@@ -149,5 +152,37 @@ final class ElementTest extends TestCase
         $el = new PanelElement('Box', new TextElement('in'), $style);
         self::assertSame($style, $el->style);
         self::assertSame(Border::Rounded, $el->style->border);
+    }
+
+    #[Test]
+    public function textAutoParsesBBCodeWhenThemePresent(): void
+    {
+        $ui = new Ui(Theme::default());
+
+        $el = $ui->text('[bold]Sparta[/]');
+
+        self::assertInstanceOf(Line::class, $el->content);
+        self::assertCount(1, $el->content->spans);
+        self::assertTrue($el->content->spans[0]->style->hasModifier(Modifier::Bold));
+    }
+
+    #[Test]
+    public function textPassesThroughStringWhenNoTheme(): void
+    {
+        $ui = new Ui();
+
+        $el = $ui->text('[bold]Sparta[/]');
+
+        self::assertSame('[bold]Sparta[/]', $el->content);
+    }
+
+    #[Test]
+    public function textWithThemeSkipsBBCodeWhenNoBrackets(): void
+    {
+        $ui = new Ui(Theme::default());
+
+        $el = $ui->text('plain text');
+
+        self::assertSame('plain text', $el->content);
     }
 }

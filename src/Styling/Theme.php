@@ -4,14 +4,93 @@ declare(strict_types=1);
 
 namespace Phalanx\Theatron\Styling;
 
-class Theme
+use Phalanx\Theatron\Layout\Border;
+use Phalanx\Theatron\Style\Color;
+use Phalanx\Theatron\Style\Style as AnsiStyle;
+use Phalanx\Theatron\Tdom\Style as TdomStyle;
+
+final class Theme
 {
-    private function __construct()
-    {
+    private AnsiStyle $boldStyle;
+    private AnsiStyle $dimStyle;
+    private AnsiStyle $italicStyle;
+    private AnsiStyle $underlineStyle;
+    private AnsiStyle $reverseStyle;
+    private AnsiStyle $strikethroughStyle;
+
+    private function __construct(
+        private(set) Color $fg,
+        private(set) Color $bg,
+        private(set) Color $surface,
+        private(set) Color $border,
+        private(set) Color $highlight,
+        private(set) AnsiStyle $default,
+        private(set) AnsiStyle $muted,
+        private(set) AnsiStyle $subtle,
+        private(set) AnsiStyle $bright,
+        private(set) AnsiStyle $accent,
+        private(set) AnsiStyle $success,
+        private(set) AnsiStyle $warning,
+        private(set) AnsiStyle $error,
+        private(set) AnsiStyle $info,
+        private(set) AnsiStyle $hint,
+        private(set) AnsiStyle $active,
+        private(set) TdomStyle $panel,
+        private(set) TdomStyle $input,
+    ) {
+        $this->boldStyle = AnsiStyle::new()->bold();
+        $this->dimStyle = AnsiStyle::new()->dim();
+        $this->italicStyle = AnsiStyle::new()->italic();
+        $this->underlineStyle = AnsiStyle::new()->underline();
+        $this->reverseStyle = AnsiStyle::new()->reverse();
+        $this->strikethroughStyle = AnsiStyle::new()->strikethrough();
     }
 
     public static function default(): self
     {
-        return new self();
+        return new self(
+            fg: Color::hex('#e0e0e0'),
+            bg: Color::hex('#1a1a1a'),
+            surface: Color::hex('#2a2a2a'),
+            border: Color::hex('#404040'),
+            highlight: Color::hex('#333333'),
+            default: AnsiStyle::new()->fg('#e0e0e0'),
+            muted: AnsiStyle::new()->fg('#707070'),
+            subtle: AnsiStyle::new()->fg('#909090'),
+            bright: AnsiStyle::new()->fg('#ffffff')->bold(),
+            accent: AnsiStyle::new()->fg('#88ccff'),
+            success: AnsiStyle::new()->fg('#77cc77'),
+            warning: AnsiStyle::new()->fg('#ccaa55'),
+            error: AnsiStyle::new()->fg('#cc6666'),
+            info: AnsiStyle::new()->fg('#88aacc'),
+            hint: AnsiStyle::new()->fg('#606060'),
+            active: AnsiStyle::new()->fg('#ffffff')->bg('#333333'),
+            panel: TdomStyle::of(border: Border::Single, color: Color::hex('#404040')),
+            input: TdomStyle::of(border: Border::Rounded, background: Color::hex('#2a2a2a')),
+        );
+    }
+
+    public function resolve(string $name): ?AnsiStyle
+    {
+        return match (strtolower($name)) {
+            'default' => $this->default,
+            'muted' => $this->muted,
+            'subtle' => $this->subtle,
+            'bright' => $this->bright,
+            'accent' => $this->accent,
+            'success' => $this->success,
+            'warning' => $this->warning,
+            'error' => $this->error,
+            'info' => $this->info,
+            'hint' => $this->hint,
+            'active' => $this->active,
+            'bold' => $this->boldStyle,
+            'dim' => $this->dimStyle,
+            'italic' => $this->italicStyle,
+            'underline' => $this->underlineStyle,
+            'reverse' => $this->reverseStyle,
+            'strikethrough' => $this->strikethroughStyle,
+            default => null,
+        };
     }
 }

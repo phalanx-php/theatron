@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Phalanx\Theatron\Tests\Unit\Reactive;
 
 use Phalanx\Theatron\Reactive\Signal;
+use Phalanx\Theatron\Reactive\Tracker;
 use Phalanx\Theatron\Reactive\Watch;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -91,6 +92,27 @@ final class WatchTest extends TestCase
     }
 
     #[Test]
+    public function reEntrancyGuardPreventsInfiniteLoop(): void
+    {
+        $sig = new Signal(1);
+        $effectCount = 0;
+
+        $watch = new Watch(
+            static fn(): int => $sig->value,
+            static function (mixed $new) use ($sig, &$effectCount): void {
+                $effectCount++;
+                $sig->value = $new + 100;
+            },
+        );
+
+        $sig->value = 2;
+
+        self::assertSame(1, $effectCount);
+
+        unset($watch);
+    }
+
+    #[Test]
     public function nonStaticSelectorThrows(): void
     {
         $this->expectException(RuntimeException::class);
@@ -114,5 +136,16 @@ final class WatchTest extends TestCase
             function (): void {
             },
         );
+    }
+
+    protected function setUp(): void
+    {
+        while (Tracker::isTracking()) {
+            try {
+                Tracker::pop(0);
+            } catch (RuntimeException) {
+                break;
+            }
+        }
     }
 }

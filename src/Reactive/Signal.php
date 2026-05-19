@@ -74,7 +74,9 @@ final class Signal
 
     private function notify(): void
     {
-        foreach ($this->subscribers as $subscriber) {
+        $snapshot = $this->subscribers;
+
+        foreach ($snapshot as $subscriber) {
             $subscriber();
         }
     }

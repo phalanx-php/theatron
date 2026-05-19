@@ -39,13 +39,13 @@ final class DisplayWidth
         }
 
         $target = $maxWidth - $ellipsisWidth;
+        $chars = mb_str_split($text);
         $result = '';
         $currentWidth = 0;
-        $len = mb_strlen($text);
+        $hasStrwidth = function_exists('mb_strwidth');
 
-        for ($i = 0; $i < $len; $i++) {
-            $char = mb_substr($text, $i, 1);
-            $charWidth = function_exists('mb_strwidth') ? mb_strwidth($char) : 1;
+        foreach ($chars as $char) {
+            $charWidth = $hasStrwidth ? mb_strwidth($char) : 1;
 
             if ($currentWidth + $charWidth > $target) {
                 break;

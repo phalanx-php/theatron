@@ -6,6 +6,7 @@ namespace Phalanx\Theatron\Tests\Unit\Reactive;
 
 use Phalanx\Theatron\Reactive\Computed;
 use Phalanx\Theatron\Reactive\Signal;
+use Phalanx\Theatron\Reactive\Tracker;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -122,5 +123,49 @@ final class ComputedTest extends TestCase
 
         $sig->value = 5;
         self::assertSame(1, $notified);
+    }
+
+    #[Test]
+    public function chainedDependencyRecomputes(): void
+    {
+        $sig = new Signal(2);
+        $b = new Computed(static fn(): int => $sig->value * 3);
+        $c = new Computed(static fn(): int => $b->value + 10);
+
+        self::assertSame(16, $c->value);
+
+        $sig->value = 5;
+        self::assertSame(25, $c->value);
+    }
+
+    #[Test]
+    public function disposalCleansUpSubscribers(): void
+    {
+        $sig = new Signal(1);
+        $computed = new Computed(static fn(): int => $sig->value);
+
+        $notified = 0;
+        $computed->subscribe(static function () use (&$notified): void {
+            $notified++;
+        });
+
+        $_ = $computed->value;
+
+        $computed->dispose();
+        self::assertSame(0, $computed->subscriberCount);
+
+        $sig->value = 2;
+        self::assertSame(0, $notified);
+    }
+
+    protected function setUp(): void
+    {
+        while (Tracker::isTracking()) {
+            try {
+                Tracker::pop(0);
+            } catch (RuntimeException) {
+                break;
+            }
+        }
     }
 }

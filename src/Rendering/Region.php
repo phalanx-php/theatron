@@ -36,11 +36,6 @@ final class Region
         $this->isDirty = true;
     }
 
-    public function invalidate(): void
-    {
-        $this->isDirty = true;
-    }
-
     public function resize(Rect $area): void
     {
         $this->area = $area;

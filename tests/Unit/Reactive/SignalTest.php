@@ -106,6 +106,48 @@ final class SignalTest extends TestCase
     }
 
     #[Test]
+    public function multipleSubscribersAllFire(): void
+    {
+        $signal = new Signal(0);
+        $a = 0;
+        $b = 0;
+
+        $signal->subscribe(static function () use (&$a): void {
+            $a++;
+        });
+        $signal->subscribe(static function () use (&$b): void {
+            $b++;
+        });
+
+        $signal->value = 1;
+
+        self::assertSame(1, $a);
+        self::assertSame(1, $b);
+    }
+
+    #[Test]
+    public function subscriberUnsubscribingDuringNotifyIsSafe(): void
+    {
+        $signal = new Signal(0);
+        $calls = 0;
+
+        $sub = $signal->subscribe(static function () use (&$sub, &$calls): void {
+            $calls++;
+            /** @var \Phalanx\Theatron\Reactive\SignalSubscription $sub */
+            $sub->dispose();
+        });
+
+        $signal->subscribe(static function () use (&$calls): void {
+            $calls++;
+        });
+
+        $signal->value = 1;
+
+        self::assertSame(2, $calls);
+        self::assertSame(1, $signal->subscriberCount);
+    }
+
+    #[Test]
     public function nonStaticSubscriberThrows(): void
     {
         $signal = new Signal(0);
@@ -115,5 +157,16 @@ final class SignalTest extends TestCase
 
         $signal->subscribe(function (): void {
         });
+    }
+
+    protected function setUp(): void
+    {
+        while (Tracker::isTracking()) {
+            try {
+                Tracker::pop(0);
+            } catch (RuntimeException) {
+                break;
+            }
+        }
     }
 }

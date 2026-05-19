@@ -1,0 +1,31 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+require_once dirname(__DIR__) . '/vendor/autoload_runtime.php';
+
+return static function (array $context): \Closure {
+    return static function () use ($context): int {
+        $stdout = fopen('php://stdout', 'w');
+        fwrite($stdout, "\033[?1049h");
+        fwrite($stdout, "\033[2J");
+        fwrite($stdout, "\033[H");
+        fwrite($stdout, "Theatron v2 — press Ctrl+C to exit\r\n");
+
+        pcntl_async_signals(true);
+        $running = true;
+        pcntl_signal(SIGINT, static function () use (&$running, $stdout): void {
+            $running = false;
+            fwrite($stdout, "\033[?1049l");
+        });
+
+        while ($running) {
+            usleep(50_000);
+        }
+
+        fclose($stdout);
+
+        return 0;
+    };
+};

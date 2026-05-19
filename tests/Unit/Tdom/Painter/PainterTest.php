@@ -6,11 +6,18 @@ namespace Phalanx\Theatron\Tests\Unit\Tdom\Painter;
 
 use Phalanx\Theatron\Buffer\Buffer;
 use Phalanx\Theatron\Buffer\Rect;
+use Phalanx\Theatron\Component\MountedComponent;
+use Phalanx\Theatron\Component\MountSystem;
+use Phalanx\Theatron\Component\SignalScanner;
+use Phalanx\Theatron\Context\RenderContext;
+use Phalanx\Theatron\Contract\Component;
 use Phalanx\Theatron\Layout\Border;
 use Phalanx\Theatron\Layout\Padding;
 use Phalanx\Theatron\Layout\Size;
+use Phalanx\Theatron\Reactive\DirtyBatch;
 use Phalanx\Theatron\Style\Color;
 use Phalanx\Theatron\Style\Modifier;
+use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Element\ColumnElement;
 use Phalanx\Theatron\Tdom\Element\DividerElement;
 use Phalanx\Theatron\Tdom\Element\GridElement;
@@ -24,7 +31,9 @@ use Phalanx\Theatron\Tdom\Element\StatusLineElement;
 use Phalanx\Theatron\Tdom\Element\TextElement;
 use Phalanx\Theatron\Tdom\Painter\PaintContext;
 use Phalanx\Theatron\Tdom\Painter\Painter;
+use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Tdom\Style;
+use Phalanx\Theatron\Tdom\Ui;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -331,6 +340,110 @@ final class PainterTest extends TestCase
 
         self::assertSame('A', $buf->get(0, 0)->char);
         self::assertSame('B', $buf->get(0, 2)->char);
+    }
+
+    #[Test]
+    public function paintDirtyMountedComponentRerenders(): void
+    {
+        $tracker = new \stdClass();
+        $tracker->count = 0;
+
+        $component = new class ($tracker) implements Component {
+            public function __construct(private \stdClass $tracker)
+            {
+            }
+
+            public function __invoke(RenderContext $ctx): Renderable
+            {
+                $this->tracker->count++;
+
+                return $ctx->ui->text('rendered');
+            }
+        };
+
+        $batch = new DirtyBatch();
+        $scanResult = SignalScanner::scan($component, $batch);
+        $mounted = new MountedComponent($component, $batch, $scanResult);
+
+        $scope = $this->createStub(\Phalanx\Scope\Scope::class);
+        $mountSystem = new MountSystem($scope);
+        $ctx = new RenderContext($scope, new Ui(), Theme::default(), $mountSystem);
+
+        $mounted->render($ctx);
+        self::assertSame(1, $tracker->count);
+
+        $mounted->markDirty();
+
+        $buf = Buffer::empty(20, 1);
+        $paintCtx = new PaintContext(Rect::sized(20, 1), $buf);
+
+        Painter::paint($mounted, $paintCtx);
+
+        self::assertSame(2, $tracker->count, 'Dirty MountedComponent must rerender during paint');
+        self::assertSame('r', $buf->get(0, 0)->char);
+    }
+
+    #[Test]
+    public function paintCleanMountedComponentSkipsRerender(): void
+    {
+        $tracker = new \stdClass();
+        $tracker->count = 0;
+
+        $component = new class ($tracker) implements Component {
+            public function __construct(private \stdClass $tracker)
+            {
+            }
+
+            public function __invoke(RenderContext $ctx): Renderable
+            {
+                $this->tracker->count++;
+
+                return $ctx->ui->text('cached');
+            }
+        };
+
+        $batch = new DirtyBatch();
+        $scanResult = SignalScanner::scan($component, $batch);
+        $mounted = new MountedComponent($component, $batch, $scanResult);
+
+        $scope = $this->createStub(\Phalanx\Scope\Scope::class);
+        $mountSystem = new MountSystem($scope);
+        $ctx = new RenderContext($scope, new Ui(), Theme::default(), $mountSystem);
+
+        $mounted->render($ctx);
+        self::assertSame(1, $tracker->count);
+
+        $buf = Buffer::empty(20, 1);
+        $paintCtx = new PaintContext(Rect::sized(20, 1), $buf);
+
+        Painter::paint($mounted, $paintCtx);
+
+        self::assertSame(1, $tracker->count, 'Clean MountedComponent must not rerender');
+        self::assertSame('c', $buf->get(0, 0)->char);
+    }
+
+    #[Test]
+    public function paintMountedComponentWithNullLastResultIsNoOp(): void
+    {
+        $component = new class () implements Component {
+            public function __invoke(RenderContext $ctx): Renderable
+            {
+                return $ctx->ui->text('never');
+            }
+        };
+
+        $batch = new DirtyBatch();
+        $scanResult = SignalScanner::scan($component, $batch);
+        $mounted = new MountedComponent($component, $batch, $scanResult);
+
+        $buf = Buffer::empty(20, 1);
+        $paintCtx = new PaintContext(Rect::sized(20, 1), $buf);
+
+        $mounted->dispose();
+
+        Painter::paint($mounted, $paintCtx);
+
+        self::assertSame(' ', $buf->get(0, 0)->char, 'Disposed component with null lastResult must not crash');
     }
 
     protected function tearDown(): void

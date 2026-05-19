@@ -77,17 +77,17 @@ final class EventParserTest extends TestCase
         self::assertCount(1, $events);
         self::assertInstanceOf(KeyEvent::class, $events[0]);
         self::assertTrue($events[0]->ctrl);
-        self::assertTrue($events[0]->is('c'));
+        self::assertTrue($events[0]->is("c"));
     }
 
     #[Test]
     public function utf8Character(): void
     {
-        $events = $this->parser->parse('å');
+        $events = $this->parser->parse("å");
 
         self::assertCount(1, $events);
         self::assertInstanceOf(KeyEvent::class, $events[0]);
-        self::assertTrue($events[0]->is('å'));
+        self::assertTrue($events[0]->is("å"));
     }
 
     #[Test]
@@ -97,7 +97,7 @@ final class EventParserTest extends TestCase
 
         self::assertCount(1, $events);
         self::assertInstanceOf(PasteEvent::class, $events[0]);
-        self::assertSame('hello world', $events[0]->content);
+        self::assertSame("hello world", $events[0]->content);
     }
 
     #[Test]
@@ -152,8 +152,8 @@ final class EventParserTest extends TestCase
         self::assertCount(2, $events);
         self::assertInstanceOf(KeyEvent::class, $events[0]);
         self::assertInstanceOf(KeyEvent::class, $events[1]);
-        self::assertTrue($events[0]->is('a'));
-        self::assertTrue($events[1]->is('b'));
+        self::assertTrue($events[0]->is("a"));
+        self::assertTrue($events[1]->is("b"));
     }
 
     #[Test]

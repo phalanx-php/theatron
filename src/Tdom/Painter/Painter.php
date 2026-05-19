@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Phalanx\Theatron\Tdom\Painter;
 
 use Phalanx\Theatron\Buffer\Rect;
+use Phalanx\Theatron\Component\MountedComponent;
 use Phalanx\Theatron\Style\Style as AnsiStyle;
 use Phalanx\Theatron\Tdom\Element;
 use Phalanx\Theatron\Tdom\Element\ColumnElement;
@@ -33,6 +34,17 @@ final class Painter
 
     public static function paint(Renderable $node, PaintContext $ctx): void
     {
+        if ($node instanceof MountedComponent) {
+            if ($node->isDirty) {
+                $node->rerender();
+            }
+            $inner = $node->lastResult();
+            if ($inner !== null) {
+                self::paint($inner, $ctx);
+            }
+            return;
+        }
+
         if (!$node instanceof Element) {
             return;
         }

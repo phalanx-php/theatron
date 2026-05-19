@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Rector\Config\RectorConfig;
 
 return RectorConfig::configure()
+    ->withBootstrapFiles([__DIR__ . '/phpstan-bootstrap.php'])
     ->withPaths([__DIR__ . '/src', __DIR__ . '/tests'])
     ->withPhpSets(php84: true)
     ->withSkip([

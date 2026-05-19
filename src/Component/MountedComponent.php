@@ -12,6 +12,7 @@ use Phalanx\Theatron\Reactive\DirtyBatch;
 use Phalanx\Theatron\Reactive\Signal;
 use Phalanx\Theatron\Reactive\SignalSubscription;
 use Phalanx\Theatron\Reactive\Tracker;
+use Phalanx\Theatron\State\StoreSubscription;
 use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Tdom\Style;
 
@@ -35,6 +36,9 @@ final class MountedComponent implements Renderable
     /** @var list<SignalSubscription> */
     private array $subscriptions;
 
+    /** @var list<StoreSubscription> */
+    private array $storeSubscriptions;
+
     public function __construct(
         private(set) Component $component,
         private(set) DirtyBatch $dirty,
@@ -42,6 +46,7 @@ final class MountedComponent implements Renderable
     ) {
         $this->ownedSignals = $scanResult->ownedSignals;
         $this->subscriptions = $scanResult->subscriptions;
+        $this->storeSubscriptions = $scanResult->storeSubscriptions;
         $this->dirty->request();
     }
 
@@ -95,6 +100,11 @@ final class MountedComponent implements Renderable
             $sub->dispose();
         }
         $this->subscriptions = [];
+
+        foreach ($this->storeSubscriptions as $sub) {
+            $sub->dispose();
+        }
+        $this->storeSubscriptions = [];
 
         foreach ($this->ownedSignals as $signal) {
             $signal->dispose();

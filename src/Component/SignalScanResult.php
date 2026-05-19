@@ -6,16 +6,19 @@ namespace Phalanx\Theatron\Component;
 
 use Phalanx\Theatron\Reactive\Signal;
 use Phalanx\Theatron\Reactive\SignalSubscription;
+use Phalanx\Theatron\State\StoreSubscription;
 
-class SignalScanResult
+final class SignalScanResult
 {
     /**
      * @param list<Signal> $ownedSignals
      * @param list<SignalSubscription> $subscriptions
+     * @param list<StoreSubscription> $storeSubscriptions
      */
     public function __construct(
         private(set) array $ownedSignals,
         private(set) array $subscriptions,
+        private(set) array $storeSubscriptions = [],
     ) {
     }
 }

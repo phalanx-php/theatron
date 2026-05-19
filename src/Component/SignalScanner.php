@@ -6,6 +6,7 @@ namespace Phalanx\Theatron\Component;
 
 use Phalanx\Theatron\Reactive\DirtyBatch;
 use Phalanx\Theatron\Reactive\Signal;
+use Phalanx\Theatron\State\Store;
 use ReflectionClass;
 use ReflectionNamedType;
 
@@ -16,6 +17,7 @@ final class SignalScanner
     {
         $ownedSignals = [];
         $subscriptions = [];
+        $storeSubscriptions = [];
 
         /** @var array<int, true> */
         $borrowed = [];
@@ -28,24 +30,37 @@ final class SignalScanner
         $ref = new ReflectionClass($component);
         foreach ($ref->getProperties() as $prop) {
             $type = $prop->getType();
-            if (!$type instanceof ReflectionNamedType || $type->getName() !== Signal::class) {
+            if (!$type instanceof ReflectionNamedType) {
                 continue;
             }
 
-            $value = $prop->getValue($component);
-            if (!$value instanceof Signal) {
-                continue;
-            }
+            $typeName = $type->getName();
 
-            $subscriptions[] = $value->subscribe(static function () use ($batch): void {
-                $batch->request();
-            });
+            if ($typeName === Signal::class) {
+                $value = $prop->getValue($component);
+                if (!$value instanceof Signal) {
+                    continue;
+                }
 
-            if (!isset($borrowed[spl_object_id($value)])) {
-                $ownedSignals[] = $value;
+                $subscriptions[] = $value->subscribe(static function () use ($batch): void {
+                    $batch->request();
+                });
+
+                if (!isset($borrowed[spl_object_id($value)])) {
+                    $ownedSignals[] = $value;
+                }
+            } elseif (is_a($typeName, Store::class, true)) {
+                $value = $prop->getValue($component);
+                if (!$value instanceof Store) {
+                    continue;
+                }
+
+                $storeSubscriptions[] = $value->subscribe(static function () use ($batch): void {
+                    $batch->request();
+                });
             }
         }
 
-        return new SignalScanResult($ownedSignals, $subscriptions);
+        return new SignalScanResult($ownedSignals, $subscriptions, $storeSubscriptions);
     }
 }

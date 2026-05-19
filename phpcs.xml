@@ -24,6 +24,12 @@
         <exclude-pattern>*/Line.php</exclude-pattern>
         <exclude-pattern>*/Span.php</exclude-pattern>
         <exclude-pattern>*/Style.php</exclude-pattern>
+        <exclude-pattern>*/Signal.php</exclude-pattern>
+        <exclude-pattern>*/Computed.php</exclude-pattern>
+        <exclude-pattern>*/SignalSubscription.php</exclude-pattern>
+        <exclude-pattern>*/ComputedSubscription.php</exclude-pattern>
+        <exclude-pattern>*/Region.php</exclude-pattern>
+        <exclude-pattern>*/Compositor.php</exclude-pattern>
     </rule>
 
     <!-- PHP 8.4 property hooks: spacing rules misfire on hook syntax -->
@@ -32,12 +38,21 @@
         <exclude-pattern>*/Line.php</exclude-pattern>
         <exclude-pattern>*/Padding.php</exclude-pattern>
         <exclude-pattern>*/Style.php</exclude-pattern>
+        <exclude-pattern>*/Signal.php</exclude-pattern>
+        <exclude-pattern>*/Computed.php</exclude-pattern>
+        <exclude-pattern>*/SignalSubscription.php</exclude-pattern>
+        <exclude-pattern>*/ComputedSubscription.php</exclude-pattern>
+        <exclude-pattern>*/Region.php</exclude-pattern>
+        <exclude-pattern>*/Compositor.php</exclude-pattern>
     </rule>
 
     <!-- PHP 8.4 property hooks: indentation rule misfires on hook bodies -->
     <rule ref="Generic.WhiteSpace.ScopeIndent.IncorrectExact">
         <exclude-pattern>*/Line.php</exclude-pattern>
         <exclude-pattern>*/Padding.php</exclude-pattern>
+        <exclude-pattern>*/Signal.php</exclude-pattern>
+        <exclude-pattern>*/Computed.php</exclude-pattern>
+        <exclude-pattern>*/Compositor.php</exclude-pattern>
     </rule>
 
     <!-- Slevomat: Member ordering -->

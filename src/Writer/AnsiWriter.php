@@ -29,8 +29,8 @@ final class AnsiWriter
         private(set) ColorMode $colorMode = ColorMode::Ansi24,
         private(set) bool $syncOutput = true,
         mixed $stream = null,
-        private readonly ?string $captureFile = null,
-        private readonly bool $fullSgr = false,
+        private ?string $captureFile = null,
+        private bool $fullSgr = false,
     ) {
         $this->stream = $stream ?? STDOUT;
         stream_set_write_buffer($this->stream, 0);

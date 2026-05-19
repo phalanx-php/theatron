@@ -10,7 +10,7 @@ final class ComputedSubscription
         get => $this->computed === null;
     }
 
-    public function __construct(private ?Computed $computed, private readonly int $subscriberId)
+    public function __construct(private ?Computed $computed, private int $subscriberId)
     {
     }
 

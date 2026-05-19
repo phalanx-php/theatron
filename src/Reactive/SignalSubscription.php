@@ -10,7 +10,7 @@ final class SignalSubscription
         get => $this->signal === null;
     }
 
-    public function __construct(private ?Signal $signal, private readonly int $subscriberId)
+    public function __construct(private ?Signal $signal, private int $subscriberId)
     {
     }
 

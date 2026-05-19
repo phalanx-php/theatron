@@ -267,11 +267,9 @@ final class PainterTest extends TestCase
         Painter::paint(new ScrollElement("line1\nline2\nline3", 2), $ctx);
 
         self::assertSame('l', $buf->get(0, 0)->char);
-        self::assertSame('i', $buf->get(1, 0)->char);
-        self::assertSame('n', $buf->get(2, 0)->char);
-        self::assertSame('e', $buf->get(3, 0)->char);
-        self::assertSame('2', $buf->get(4, 0)->char);
-        self::assertSame('3', $buf->get(4, 1)->char);
+        self::assertSame('2', $buf->get(4, 0)->char, 'First visible line should be "line2"');
+        self::assertSame('l', $buf->get(0, 1)->char);
+        self::assertSame('3', $buf->get(4, 1)->char, 'Second visible line should be "line3"');
     }
 
     #[Test]
@@ -313,16 +311,9 @@ final class PainterTest extends TestCase
 
         Painter::paint(new ProgressElement(1.5), $ctx);
 
-        $allFilled = true;
-
-        for ($x = 0; $x < 15; $x++) {
-            if ($buf->get($x, 0)->char !== '█') {
-                $allFilled = false;
-                break;
-            }
+        for ($x = 0; $x < 20; $x++) {
+            self::assertSame('█', $buf->get($x, 0)->char, "Cell {$x} should be filled at 150%");
         }
-
-        self::assertTrue($allFilled);
     }
 
     #[Test]
@@ -339,5 +330,11 @@ final class PainterTest extends TestCase
         Painter::paint($col, $ctx);
 
         self::assertSame('A', $buf->get(0, 0)->char);
+        self::assertSame('B', $buf->get(0, 2)->char);
+    }
+
+    protected function tearDown(): void
+    {
+        Painter::reset();
     }
 }

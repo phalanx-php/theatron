@@ -16,7 +16,7 @@ final class Span
         ?Style $style = null,
     ) {
         $this->style = $style ?? Style::new();
-        $this->width = mb_strlen($this->content);
+        $this->width = mb_strwidth($this->content);
     }
 
     public static function plain(string $content): self

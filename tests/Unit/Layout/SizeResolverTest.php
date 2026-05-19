@@ -50,4 +50,65 @@ final class SizeResolverTest extends TestCase
         self::assertSame(23, $rects[2]->y);
         self::assertSame(1, $rects[2]->height);
     }
+
+    #[Test]
+    public function horizontalProducesCorrectRects(): void
+    {
+        $area = Rect::sized(80, 24);
+        $rects = SizeResolver::horizontal($area, [Size::fixed(10), Size::fill(), Size::fixed(10)]);
+
+        self::assertCount(3, $rects);
+        self::assertSame(0, $rects[0]->x);
+        self::assertSame(10, $rects[0]->width);
+        self::assertSame(10, $rects[1]->x);
+        self::assertSame(60, $rects[1]->width);
+        self::assertSame(70, $rects[2]->x);
+        self::assertSame(10, $rects[2]->width);
+    }
+
+    #[Test]
+    public function betweenExpandsToFillAvailableSpace(): void
+    {
+        $result = SizeResolver::resolve(100, [Size::fixed(20), Size::between(10, 60)]);
+
+        self::assertSame([20, 60], $result);
+    }
+
+    #[Test]
+    public function betweenClampsAtMax(): void
+    {
+        $result = SizeResolver::resolve(200, [Size::between(10, 50)]);
+
+        self::assertSame([50], $result);
+    }
+
+    #[Test]
+    public function betweenUsesMinWhenConstrained(): void
+    {
+        $result = SizeResolver::resolve(30, [Size::fixed(25), Size::between(10, 50)]);
+
+        self::assertSame([25, 5], $result);
+    }
+
+    #[Test]
+    public function fractionalDistributesProportionally(): void
+    {
+        $result = SizeResolver::resolve(100, [Size::fr(1), Size::fr(3)]);
+
+        self::assertSame([25, 75], $result);
+    }
+
+    #[Test]
+    public function fractionalWithFixed(): void
+    {
+        $result = SizeResolver::resolve(100, [Size::fixed(20), Size::fr(1), Size::fr(1)]);
+
+        self::assertSame([20, 40, 40], $result);
+    }
+
+    #[Test]
+    public function emptyInputReturnsEmpty(): void
+    {
+        self::assertSame([], SizeResolver::resolve(100, []));
+    }
 }

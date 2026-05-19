@@ -9,11 +9,8 @@ use Phalanx\Theatron\Style\ColorMode;
 final class Terminal
 {
     /**
-     * Detect terminal capabilities from the current environment.
-     * Call once at boot, pass the resulting TerminalConfig to all consumers.
-     *
-     * @param array<string, string|false> $env environment variables (COLUMNS, LINES, COLORTERM, TERM, NO_COLOR, CI)
-     * @param resource|null $stdout stream to check for TTY (defaults to STDOUT)
+     * @param array<string, string|false> $env
+     * @param resource|null $stdout
      */
     public static function detect(array $env = [], mixed $stdout = null): TerminalConfig
     {
@@ -93,12 +90,7 @@ final class Terminal
         return ColorMode::Ansi4;
     }
 
-    /**
-     * Boot-time terminal detection via subprocess.
-     * Runs once before any Aegis scope exists.
-     *
-     * @return array{int, int}|null [rows, cols]
-     */
+    /** @return array{int, int}|null [rows, cols] */
     private static function probeSize(): ?array
     {
         if (\PHP_OS_FAMILY === 'Windows') {

@@ -18,6 +18,7 @@ use Phalanx\Theatron\Input\KeyEvent;
 use Phalanx\Theatron\Rendering\Compositor;
 use Phalanx\Theatron\Rendering\Region;
 use Phalanx\Theatron\Rendering\RegionConfig;
+use Phalanx\Theatron\Tdom\Painter\Painter;
 use Phalanx\Theatron\Terminal\Terminal;
 use Phalanx\Theatron\Terminal\TerminalConfig;
 use Phalanx\Theatron\Writer\AnsiWriter;
@@ -50,7 +51,7 @@ final class Stage
         private(set) StageConfig $config,
     ) {
         $this->compositor = new Compositor();
-        $this->terminal = Terminal::detect(getenv() ?: []);
+        $this->terminal = Terminal::detect($this->config->env);
         $this->current = Buffer::empty($this->terminal->width, $this->terminal->height);
         $this->previous = Buffer::empty($this->terminal->width, $this->terminal->height);
         $this->writer = new AnsiWriter(
@@ -161,6 +162,7 @@ final class Stage
         $this->tickSubscription?->cancel();
         $this->tickSubscription = null;
         Process::signal(SIGWINCH, null);
+        Painter::reset();
         $this->leaveScreen();
     }
 
@@ -300,7 +302,7 @@ final class Stage
 
     private function handleResize(): void
     {
-        $this->terminal = Terminal::detect(getenv() ?: []);
+        $this->terminal = Terminal::detect($this->config->env);
         $w = $this->terminal->width;
         $h = $this->terminal->height;
 

@@ -15,8 +15,8 @@ final class Sync
     private ?Closure $cleanup = null;
 
     public function __construct(
-        private readonly Closure $setup,
-        private readonly ?TaskScope $scope = null,
+        private Closure $setup,
+        private ?TaskScope $scope = null,
         private mixed $currentKey = null,
     ) {
         if (!new ReflectionFunction($setup)->isStatic()) {

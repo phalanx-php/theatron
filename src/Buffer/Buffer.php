@@ -76,21 +76,27 @@ final class Buffer
         }
 
         $chars = mb_str_split($text);
-        $len = count($chars);
+        $cx = $x;
 
-        for ($i = 0; $i < $len; $i++) {
-            $cx = $x + $i;
+        foreach ($chars as $ch) {
+            $cw = mb_strwidth($ch);
 
-            if ($cx >= $this->width) {
+            if ($cx + $cw > $this->width) {
                 break;
             }
 
             if ($cx >= 0) {
-                $this->cells[$base + $cx]->set($chars[$i], $style);
+                $this->cells[$base + $cx]->set($ch, $style);
+
+                for ($p = 1; $p < $cw; $p++) {
+                    $this->cells[$base + $cx + $p]->setWidePlaceholder($style);
+                }
             }
+
+            $cx += $cw;
         }
 
-        return min($x + $len, $this->width);
+        return min($cx, $this->width);
     }
 
     public function putLine(int $x, int $y, Line $line, int $maxWidth): void
@@ -107,8 +113,8 @@ final class Buffer
             }
 
             $remaining = $maxWidth - ($cx - $x);
-            $text = mb_strlen($span->content) > $remaining
-                ? mb_substr($span->content, 0, $remaining)
+            $text = mb_strwidth($span->content) > $remaining
+                ? mb_strimwidth($span->content, 0, $remaining)
                 : $span->content;
 
             $cx = $this->putString($cx, $y, $text, $span->style);

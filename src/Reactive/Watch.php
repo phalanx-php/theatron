@@ -19,8 +19,8 @@ final class Watch
     private array $depSubscriptions = [];
 
     public function __construct(
-        private readonly Closure $selector,
-        private readonly Closure $effect,
+        private Closure $selector,
+        private Closure $effect,
     ) {
         if (!new ReflectionFunction($selector)->isStatic()) {
             throw new RuntimeException('Watch selector must be a static closure.');

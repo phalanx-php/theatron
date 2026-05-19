@@ -71,7 +71,7 @@ final class Line
         $col = 0;
 
         foreach ($segments as [$text, $style, $isSpace]) {
-            $width = mb_strlen($text);
+            $width = mb_strwidth($text);
 
             if ($col === 0 && $isSpace) {
                 continue;
@@ -86,14 +86,15 @@ final class Line
                 }
 
                 if ($width > $maxWidth) {
-                    while (mb_strlen($text) > $maxWidth) {
-                        $lines[] = new self(Span::styled(mb_substr($text, 0, $maxWidth), $style));
-                        $text = mb_substr($text, $maxWidth);
+                    while (mb_strwidth($text) > $maxWidth) {
+                        $chunk = mb_strimwidth($text, 0, $maxWidth);
+                        $lines[] = new self(Span::styled($chunk, $style));
+                        $text = mb_substr($text, mb_strlen($chunk));
                     }
 
                     if ($text !== '') {
                         $currentSpans[] = Span::styled($text, $style);
-                        $col = mb_strlen($text);
+                        $col = mb_strwidth($text);
                     }
 
                     continue;

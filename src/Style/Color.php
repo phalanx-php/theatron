@@ -33,11 +33,11 @@ final class Color
     private static array $indexedCache = [];
 
     private function __construct(
-        private readonly ColorKind $kind,
-        private readonly int $r = 0,
-        private readonly int $g = 0,
-        private readonly int $b = 0,
-        private readonly int $index = 0,
+        private ColorKind $kind,
+        private int $r = 0,
+        private int $g = 0,
+        private int $b = 0,
+        private int $index = 0,
     ) {
     }
 

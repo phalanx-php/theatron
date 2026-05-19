@@ -26,6 +26,14 @@ final class Cell
         $this->transparent = false;
     }
 
+    public function setWidePlaceholder(Style $style): void
+    {
+        $this->char = '';
+        $this->style = $style;
+        $this->skipDiff = true;
+        $this->transparent = false;
+    }
+
     public function reset(): void
     {
         $this->char = ' ';

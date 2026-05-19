@@ -91,7 +91,6 @@ final class TrackerTest extends TestCase
 
     protected function setUp(): void
     {
-        // Ensure fallback stack is clean between tests.
         while (Tracker::isTracking()) {
             try {
                 Tracker::pop(0);

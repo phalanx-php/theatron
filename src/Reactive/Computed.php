@@ -41,8 +41,8 @@ final class Computed
     private array $depSubscriptions = [];
 
     public function __construct(
-        private readonly Closure $factory,
-        private readonly ?Closure $onDirty = null,
+        private Closure $factory,
+        private ?Closure $onDirty = null,
     ) {
         if (!new ReflectionFunction($factory)->isStatic()) {
             throw new RuntimeException('Computed factory must be a static closure.');

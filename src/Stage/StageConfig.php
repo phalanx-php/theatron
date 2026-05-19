@@ -8,6 +8,7 @@ use Phalanx\Theatron\Style\ColorMode;
 
 final class StageConfig
 {
+    /** @param array<string, string|false> $env */
     public function __construct(
         private(set) ScreenMode $screenMode = ScreenMode::Alternate,
         private(set) bool $mouseTracking = false,
@@ -22,6 +23,7 @@ final class StageConfig
         private(set) ?string $captureFile = null,
         private(set) bool $fullSgr = false,
         private(set) bool $flushMemoryCaches = true,
+        private(set) array $env = [],
     ) {
     }
 }

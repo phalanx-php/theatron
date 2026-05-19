@@ -21,9 +21,9 @@ final class Resource
     private int $generation = 0;
 
     public function __construct(
-        private readonly Closure $fetcher,
-        private readonly ?TaskScope $scope = null,
-        private readonly ?Closure $onDirty = null,
+        private Closure $fetcher,
+        private ?TaskScope $scope = null,
+        private ?Closure $onDirty = null,
     ) {
         if (!new ReflectionFunction($fetcher)->isStatic()) {
             throw new RuntimeException('Resource fetcher must be a static closure.');

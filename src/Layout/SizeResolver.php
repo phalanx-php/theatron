@@ -84,6 +84,32 @@ final class SizeResolver
             }
         }
 
+        if ($remaining > 0) {
+            $betweenIndices = [];
+
+            foreach ($sizes as $i => $size) {
+                if ($size->kind === SizeKind::Between) {
+                    $headroom = $size->max - $allocated[$i];
+
+                    if ($headroom > 0) {
+                        $betweenIndices[] = $i;
+                    }
+                }
+            }
+
+            if ($betweenIndices !== []) {
+                $betweenShare = $remaining;
+
+                foreach ($betweenIndices as $j => $i) {
+                    $headroom = $sizes[$i]->max - $allocated[$i];
+                    $portion = (int) floor($betweenShare / (count($betweenIndices) - $j));
+                    $give = min($portion, $headroom);
+                    $allocated[$i] += $give;
+                    $remaining -= $give;
+                }
+            }
+        }
+
         if ($fractionalTotal > 0 && $remaining > 0) {
             $distributed = 0;
 
@@ -97,12 +123,6 @@ final class SizeResolver
 
                 $allocated[$i] = $share;
                 $distributed += $share;
-            }
-        }
-
-        foreach ($sizes as $i => $size) {
-            if ($size->kind === SizeKind::Between) {
-                $allocated[$i] = min($allocated[$i], $size->max);
             }
         }
 

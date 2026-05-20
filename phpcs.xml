@@ -35,6 +35,8 @@
         <exclude-pattern>*/StyledIntegrationTest.php</exclude-pattern>
         <exclude-pattern>*/Region.php</exclude-pattern>
         <exclude-pattern>*/Compositor.php</exclude-pattern>
+        <exclude-pattern>*/AppStore.php</exclude-pattern>
+        <exclude-pattern>*/AppStoreTest.php</exclude-pattern>
     </rule>
 
     <!-- PHP 8.4 property hooks: spacing rules misfire on hook syntax -->
@@ -52,6 +54,8 @@
         <exclude-pattern>*/StoreIntegrationTest.php</exclude-pattern>
         <exclude-pattern>*/Region.php</exclude-pattern>
         <exclude-pattern>*/Compositor.php</exclude-pattern>
+        <exclude-pattern>*/AppStore.php</exclude-pattern>
+        <exclude-pattern>*/AppStoreTest.php</exclude-pattern>
     </rule>
 
     <!-- PHP 8.4 property hooks: indentation rule misfires on hook bodies -->

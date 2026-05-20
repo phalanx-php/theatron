@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Phalanx\Theatron;
 
 use Phalanx\Boot\AppContext;
+use Phalanx\Console\Input\ConsoleInput;
 use Phalanx\Service\ServiceBundle;
 use Phalanx\Service\Services;
 use Phalanx\Theatron\Binding\BindingRegistry;
@@ -31,6 +32,9 @@ final class TheatronServiceBundle extends ServiceBundle
     {
         $config = $this->stageConfig;
         $theme = $this->theme ?? Theme::default();
+
+        $services->singleton(ConsoleInput::class)
+            ->factory(static fn(): ConsoleInput => new ConsoleInput());
 
         $services->singleton(StageConfig::class)
             ->factory(static fn(): StageConfig => $config);

@@ -6,6 +6,7 @@ namespace Phalanx\Theatron;
 
 use InvalidArgumentException;
 use Phalanx\Boot\AppContext;
+use Phalanx\Service\ServiceBundle;
 use Phalanx\Theatron\Binding\Binding;
 use Phalanx\Theatron\Contract\Screen;
 use Phalanx\Theatron\Stage\Stage;
@@ -20,6 +21,9 @@ final class TheatronBuilder
 
     /** @var list<Binding> */
     private array $globalBindings = [];
+
+    /** @var list<ServiceBundle> */
+    private array $bundles = [];
 
     /** @var class-string<Store>|null */
     private ?string $storeClass = null;
@@ -87,6 +91,13 @@ final class TheatronBuilder
         return $this;
     }
 
+    public function services(ServiceBundle ...$bundles): self
+    {
+        $this->bundles = [...$this->bundles, ...array_values($bundles)];
+
+        return $this;
+    }
+
     // -------------------------------------------------------------------------
     // Assembly
 
@@ -128,6 +139,12 @@ final class TheatronBuilder
     public function registeredGlobalBindings(): array
     {
         return $this->globalBindings;
+    }
+
+    /** @return list<ServiceBundle> */
+    public function registeredServiceBundles(): array
+    {
+        return $this->bundles;
     }
 
     public function serviceBundle(): TheatronServiceBundle

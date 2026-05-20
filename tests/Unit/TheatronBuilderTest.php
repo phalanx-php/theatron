@@ -6,6 +6,8 @@ namespace Phalanx\Theatron\Tests\Unit;
 
 use InvalidArgumentException;
 use Phalanx\Boot\AppContext;
+use Phalanx\Service\ServiceBundle;
+use Phalanx\Service\Services;
 use Phalanx\Theatron\Binding\Binding;
 use Phalanx\Theatron\Context\ScreenContext;
 use Phalanx\Theatron\Contract\Screen;
@@ -43,6 +45,20 @@ final class SpartaScreen implements Screen
 final class ZeusStore extends Store
 {
     public function __construct()
+    {
+    }
+}
+
+final class AresBundle extends ServiceBundle
+{
+    public function services(Services $services, AppContext $context): void
+    {
+    }
+}
+
+final class ApolloBundle extends ServiceBundle
+{
+    public function services(Services $services, AppContext $context): void
     {
     }
 }
@@ -261,5 +277,31 @@ final class TheatronBuilderTest extends TestCase
             ->build();
 
         self::assertCount(2, $app->globalBindings());
+    }
+
+    #[Test]
+    public function servicesAcceptsBundles(): void
+    {
+        $bundle = new AresBundle();
+        $builder = Theatron::app()
+            ->screens([OlympusScreen::class])
+            ->services($bundle);
+
+        self::assertSame($builder, $builder);
+        self::assertContains($bundle, $builder->registeredServiceBundles());
+    }
+
+    #[Test]
+    public function registeredServiceBundlesAccumulatesAcrossMultipleCalls(): void
+    {
+        $ares = new AresBundle();
+        $apollo = new ApolloBundle();
+
+        $builder = Theatron::app()
+            ->screens([OlympusScreen::class])
+            ->services($ares)
+            ->services($apollo);
+
+        self::assertSame([$ares, $apollo], $builder->registeredServiceBundles());
     }
 }

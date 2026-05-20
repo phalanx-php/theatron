@@ -8,7 +8,9 @@ use Phalanx\Cancellation\Cancelled;
 use Phalanx\Scope\ExecutionScope;
 use Phalanx\Theatron\Binding\Binding;
 use Phalanx\Theatron\Binding\BindingRegistry;
+use Phalanx\Theatron\Buffer\Rect;
 use Phalanx\Theatron\Component\MountSystem;
+use Phalanx\Theatron\Context\ScreenContext;
 use Phalanx\Theatron\Contract\Screen;
 use Phalanx\Theatron\Input\InputEvent;
 use Phalanx\Theatron\Input\KeyEvent;
@@ -16,6 +18,9 @@ use Phalanx\Theatron\Navigation\WorkspaceNavigator;
 use Phalanx\Theatron\Stage\Stage;
 use Phalanx\Theatron\State\Store;
 use Phalanx\Theatron\Styling\Theme;
+use Phalanx\Theatron\Tdom\Painter\PaintContext;
+use Phalanx\Theatron\Tdom\Painter\Painter;
+use Phalanx\Theatron\Tdom\Ui;
 
 final class TheatronApp
 {
@@ -42,6 +47,31 @@ final class TheatronApp
         $mountSystem = new MountSystem($scope);
         $navigator = new WorkspaceNavigator($mountSystem, $this->screens[0]);
         $registry->activateScreen($this->screens[0]);
+
+        $ui = new Ui($this->theme);
+        $screenCtx = new ScreenContext($scope, $ui, $this->theme, $navigator, $mountSystem);
+
+        $mainRegion = $this->stage->region(
+            'main',
+            Rect::of(0, 0, $this->stage->width(), $this->stage->height()),
+        );
+
+        $this->stage->onResize(static function (int $w, int $h) use ($mainRegion): void {
+            $mainRegion->resize(Rect::of(0, 0, $w, $h));
+        });
+
+        $this->stage->onDraw(static function () use ($navigator, $mainRegion, $screenCtx): void {
+            $workspace = $navigator->activeWorkspace();
+
+            if (!$workspace->isDirty) {
+                return;
+            }
+
+            $renderable = $workspace->render($screenCtx);
+            $mainRegion->buffer()->clear();
+            Painter::paint($renderable, new PaintContext($mainRegion->area, $mainRegion->buffer()));
+            $mainRegion->markDirty();
+        });
 
         $this->stage->onInput(static function (InputEvent $event) use ($registry, $navigator, $scope): void {
             if (!$event instanceof KeyEvent) {

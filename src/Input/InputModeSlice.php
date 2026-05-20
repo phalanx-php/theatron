@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Phalanx\Theatron\Input;
 
-class InputModeSlice
+final class InputModeSlice
 {
     public function __construct(
         private(set) InputMode $mode = InputMode::Normal,

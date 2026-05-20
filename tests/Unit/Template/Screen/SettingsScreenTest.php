@@ -7,6 +7,7 @@ namespace Phalanx\Theatron\Tests\Unit\Template\Screen;
 use Phalanx\Scope\TaskScope;
 use Phalanx\Theatron\Component\MountSystem;
 use Phalanx\Theatron\Context\ScreenContext;
+use Phalanx\Theatron\Contract\HasStatusBar;
 use Phalanx\Theatron\Navigation\Navigator;
 use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Element\ColumnElement;
@@ -15,6 +16,7 @@ use Phalanx\Theatron\Tdom\Element\PanelElement;
 use Phalanx\Theatron\Tdom\Element\StatusLineElement;
 use Phalanx\Theatron\Tdom\Element\TextElement;
 use Phalanx\Theatron\Tdom\Ui;
+use Phalanx\Theatron\Template\AppStore;
 use Phalanx\Theatron\Template\Screen\SettingsScreen;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -24,7 +26,7 @@ final class SettingsScreenTest extends TestCase
     #[Test]
     public function rendersSettingsLayout(): void
     {
-        $screen = new SettingsScreen();
+        $screen = new SettingsScreen(new AppStore());
         $ctx = $this->makeContext();
 
         $result = $screen($ctx);
@@ -32,21 +34,36 @@ final class SettingsScreenTest extends TestCase
         self::assertInstanceOf(ColumnElement::class, $result);
 
         $children = $result->children;
-        self::assertCount(7, $children);
+        self::assertCount(5, $children);
 
         self::assertInstanceOf(PanelElement::class, $children[0]);
         self::assertInstanceOf(DividerElement::class, $children[1]);
         self::assertInstanceOf(PanelElement::class, $children[2]);
         self::assertInstanceOf(DividerElement::class, $children[3]);
         self::assertInstanceOf(PanelElement::class, $children[4]);
-        self::assertInstanceOf(DividerElement::class, $children[5]);
-        self::assertInstanceOf(StatusLineElement::class, $children[6]);
+    }
+
+    #[Test]
+    public function implementsHasStatusBar(): void
+    {
+        self::assertInstanceOf(HasStatusBar::class, new SettingsScreen(new AppStore()));
+    }
+
+    #[Test]
+    public function statusBarRendersNormalModeAndLabel(): void
+    {
+        $screen = new SettingsScreen(new AppStore());
+        $ui = new Ui();
+
+        $result = $screen->statusBar($ui);
+
+        self::assertInstanceOf(StatusLineElement::class, $result);
     }
 
     #[Test]
     public function providerSectionShowsDefaults(): void
     {
-        $screen = new SettingsScreen();
+        $screen = new SettingsScreen(new AppStore());
         $ctx = $this->makeContext();
 
         $result = $screen($ctx);
@@ -73,7 +90,7 @@ final class SettingsScreenTest extends TestCase
     #[Test]
     public function modelSectionShowsDefault(): void
     {
-        $screen = new SettingsScreen();
+        $screen = new SettingsScreen(new AppStore());
         $ctx = $this->makeContext();
 
         $result = $screen($ctx);
@@ -95,7 +112,7 @@ final class SettingsScreenTest extends TestCase
     #[Test]
     public function activitySectionShowsDefaults(): void
     {
-        $screen = new SettingsScreen();
+        $screen = new SettingsScreen(new AppStore());
         $ctx = $this->makeContext();
 
         $result = $screen($ctx);

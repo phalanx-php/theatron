@@ -296,6 +296,79 @@ final class ChatScreenTest extends TestCase
         self::assertInstanceOf(TextElement::class, $indicator);
     }
 
+    #[Test]
+    public function scrollUpClampsAtZero(): void
+    {
+        $store = new AppStore();
+        $conv = new ConversationSlice();
+        for ($i = 1; $i <= 15; $i++) {
+            $conv = $conv->addUserMessage("Spartan {$i} stands ready.");
+        }
+        $store->conversation = $conv;
+
+        $screen = new ChatScreen($store);
+        $offsetProp = new \ReflectionProperty(ChatScreen::class, 'scrollOffset');
+
+        self::assertSame(0, $offsetProp->getValue($screen));
+
+        // Press 'k' (up) at offset 0 — should stay at 0.
+        $screen->handleScroll(new KeyEvent('k'));
+        self::assertSame(0, $offsetProp->getValue($screen));
+    }
+
+    #[Test]
+    public function scrollDownClampsAtMax(): void
+    {
+        $store = new AppStore();
+        $conv = new ConversationSlice();
+        for ($i = 1; $i <= 15; $i++) {
+            $conv = $conv->addUserMessage("Pericles decree {$i}.");
+        }
+        $store->conversation = $conv;
+
+        $screen = new ChatScreen($store);
+        $offsetProp = new \ReflectionProperty(ChatScreen::class, 'scrollOffset');
+
+        // maxScroll = max(0, 15 - 12) = 3. Jump to end.
+        $screen->handleScroll(new KeyEvent('G'));
+        self::assertSame(3, $offsetProp->getValue($screen));
+
+        // Press 'j' (down) at max — should stay at 3.
+        $screen->handleScroll(new KeyEvent('j'));
+        self::assertSame(3, $offsetProp->getValue($screen));
+    }
+
+    #[Test]
+    public function inputHandlerEnterSubmitsText(): void
+    {
+        $store = new AppStore();
+        $screen = new ChatScreen($store);
+        $handler = new ChatInputHandler($screen);
+
+        $screen->inputText->value = 'Form the phalanx.';
+        $result = $handler->handleInput(new KeyEvent(Key::Enter));
+
+        self::assertTrue($result);
+        self::assertCount(1, $store->conversation->messages);
+        self::assertSame('user', $store->conversation->messages[0]->role);
+        self::assertSame('Form the phalanx.', $store->conversation->messages[0]->text);
+        self::assertSame('', $screen->inputText->value);
+    }
+
+    #[Test]
+    public function inputHandlerEnterOnEmptyDoesNotSubmit(): void
+    {
+        $store = new AppStore();
+        $screen = new ChatScreen($store);
+        $handler = new ChatInputHandler($screen);
+
+        // inputText is '' by default.
+        $result = $handler->handleInput(new KeyEvent(Key::Enter));
+
+        self::assertFalse($result);
+        self::assertSame([], $store->conversation->messages);
+    }
+
     private function makeContext(AppStore $store): ScreenContext
     {
         $scope = $this->createStub(TaskScope::class);

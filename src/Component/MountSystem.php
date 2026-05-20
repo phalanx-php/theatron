@@ -19,10 +19,23 @@ class MountSystem
     /** @var list<MountedComponent> */
     private array $mounted = [];
 
+    /** @var array<class-string, object> */
+    private array $provided = [];
+
     public function __construct(
         private(set) Scope $scope,
         private ?TaskScope $taskScope = null,
     ) {
+    }
+
+    /** @param class-string $class */
+    public function provide(string $class, object $instance): void
+    {
+        if (!$instance instanceof $class) {
+            throw new \RuntimeException(sprintf('Expected instance of %s, got %s.', $class, $instance::class));
+        }
+
+        $this->provided[$class] = $instance;
     }
 
     /**
@@ -33,7 +46,7 @@ class MountSystem
     {
         $namedParams = self::extractNamedParams($params);
         /** @var Component $instance */
-        $instance = self::resolveInstance($component, $namedParams, $this->scope);
+        $instance = self::resolveInstance($component, $namedParams, $this->scope, $this->provided);
         $dirty = new DirtyBatch();
 
         $scanResult = SignalScanner::scan($instance, $dirty, $namedParams);
@@ -61,7 +74,7 @@ class MountSystem
     {
         $namedParams = self::extractNamedParams($params);
         /** @var Screen $instance */
-        $instance = self::resolveInstance($screen, $namedParams, $this->scope);
+        $instance = self::resolveInstance($screen, $namedParams, $this->scope, $this->provided);
         $dirty = new DirtyBatch();
 
         $scanResult = SignalScanner::scan($instance, $dirty, $namedParams);
@@ -93,8 +106,9 @@ class MountSystem
     /**
      * @param class-string $class
      * @param array<string, mixed> $namedParams
+     * @param array<class-string, object> $provided
      */
-    private static function resolveInstance(string $class, array $namedParams, Scope $scope): object
+    private static function resolveInstance(string $class, array $namedParams, Scope $scope, array $provided): object
     {
         $ref = new ReflectionClass($class);
         $constructor = $ref->getConstructor();
@@ -122,6 +136,12 @@ class MountSystem
             if ($type instanceof ReflectionNamedType && !$type->isBuiltin()) {
                 /** @var class-string $typeName */
                 $typeName = $type->getName();
+
+                if (isset($provided[$typeName])) {
+                    $args[$name] = $provided[$typeName];
+                    continue;
+                }
+
                 try {
                     $args[$name] = $scope->service($typeName);
                     continue;

@@ -10,7 +10,7 @@ use Phalanx\Theatron\Rendering\Region;
 use Phalanx\Theatron\Stage\Stage;
 use RuntimeException;
 
-class ScreenLayout
+final class ScreenLayout
 {
     /** @var array<string, ScreenLayoutSlot> */
     private(set) array $slots = [];

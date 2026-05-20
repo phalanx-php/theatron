@@ -55,17 +55,8 @@ class AgentBoardScreen implements Screen, HasStatusBar, HasFocusables, NormalMod
         $inputMode = $this->store->inputMode;
         $agentCount = count($this->store->agents->agents);
 
-        $modeLabel = match ($inputMode->mode) {
-            \Phalanx\Theatron\Input\InputMode::Normal => ' NORMAL ',
-            \Phalanx\Theatron\Input\InputMode::Insert => ' INSERT ',
-        };
-        $modeColor = match ($inputMode->mode) {
-            \Phalanx\Theatron\Input\InputMode::Normal => Color::brightCyan(),
-            \Phalanx\Theatron\Input\InputMode::Insert => Color::brightGreen(),
-        };
-
         return StatusBar::new()
-            ->section($modeLabel, $modeColor)
+            ->section($inputMode->mode->label(), $inputMode->mode->color())
             ->left('Board')
             ->right(sprintf('Agents: %d', $agentCount))
             ->render($ui);

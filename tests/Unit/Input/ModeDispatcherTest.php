@@ -209,4 +209,87 @@ final class ModeDispatcherTest extends TestCase
         self::assertSame('list', $focus->activeName());
         self::assertSame(InputMode::Normal, $dispatcher->mode);
     }
+
+    #[Test]
+    public function hKeyNavigatesFocusBackward(): void
+    {
+        $focus = new FocusManager();
+        $focus->register('alpha', new class () implements Focusable {
+        });
+        $focus->register('beta', new class () implements Focusable {
+        });
+
+        $dispatcher = new ModeDispatcher($focus);
+
+        // Advance to beta first via 'l'.
+        $dispatcher->dispatch(new KeyEvent(key: 'l'));
+        self::assertSame('beta', $focus->activeName());
+
+        // Press 'h' to go backward.
+        $result = $dispatcher->dispatch(new KeyEvent(key: 'h'));
+
+        self::assertTrue($result);
+        self::assertSame('alpha', $focus->activeName());
+    }
+
+    #[Test]
+    public function lKeyNavigatesFocusForward(): void
+    {
+        $focus = new FocusManager();
+        $focus->register('alpha', new class () implements Focusable {
+        });
+        $focus->register('beta', new class () implements Focusable {
+        });
+
+        $dispatcher = new ModeDispatcher($focus);
+        $result = $dispatcher->dispatch(new KeyEvent(key: 'l'));
+
+        self::assertTrue($result);
+        self::assertSame('beta', $focus->activeName());
+    }
+
+    #[Test]
+    public function enterKeyEntersInsertModeOnInputTarget(): void
+    {
+        $focus = new FocusManager();
+        $focus->register('input', new class () implements Focusable, AcceptsInput {
+            public function handleInput(KeyEvent $event): bool
+            {
+                return true;
+            }
+        });
+
+        $dispatcher = new ModeDispatcher($focus);
+        $result = $dispatcher->dispatch(new KeyEvent(key: Key::Enter));
+
+        self::assertTrue($result);
+        self::assertSame(InputMode::Insert, $dispatcher->mode);
+    }
+
+    #[Test]
+    public function tabInInsertModeCyclesFocusAndAutoSetsMode(): void
+    {
+        $focus = new FocusManager();
+        $focus->register('input', new class () implements Focusable, AcceptsInput {
+            public function handleInput(KeyEvent $event): bool
+            {
+                return true;
+            }
+        });
+        $focus->register('list', new class () implements Focusable {
+        });
+
+        $dispatcher = new ModeDispatcher($focus);
+
+        // Enter insert mode on AcceptsInput target.
+        $dispatcher->dispatch(new KeyEvent(key: 'i'));
+        self::assertSame(InputMode::Insert, $dispatcher->mode);
+
+        // Tab in insert mode moves to plain Focusable — auto-switch to Normal.
+        $result = $dispatcher->dispatch(new KeyEvent(key: Key::Tab));
+
+        self::assertTrue($result);
+        self::assertSame('list', $focus->activeName());
+        self::assertSame(InputMode::Normal, $dispatcher->mode);
+    }
 }

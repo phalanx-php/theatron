@@ -14,7 +14,7 @@ use Phalanx\Theatron\Input\NormalModeHandler;
 final class ChatConversationHandler implements NormalModeHandler
 {
     public function __construct(
-        private(set) ChatScreen $screen,
+        private ChatScreen $screen,
     ) {
     }
 

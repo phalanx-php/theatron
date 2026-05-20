@@ -16,7 +16,7 @@ class ModeDispatcher
     private ?Closure $onModeChange = null;
 
     public function __construct(
-        private readonly FocusManager $focus,
+        private(set) FocusManager $focus,
     ) {
     }
 
@@ -74,16 +74,6 @@ class ModeDispatcher
                 $this->setMode(InputMode::Insert);
 
                 return true;
-            }
-
-            return false;
-        }
-
-        if ($event->is('j') || $event->is('k') || $event->is(Key::Up) || $event->is(Key::Down)) {
-            $active = $this->focus->active();
-
-            if ($active instanceof NormalModeHandler) {
-                return $active->handleNormalKey($event);
             }
 
             return false;

@@ -7,6 +7,7 @@ namespace Phalanx\Theatron\Tests\Unit\Kit;
 use Phalanx\Theatron\Kit\StatusBar;
 use Phalanx\Theatron\Style\Color;
 use Phalanx\Theatron\Tdom\Element\StatusLineElement;
+use Phalanx\Theatron\Tdom\Element\TextElement;
 use Phalanx\Theatron\Tdom\Ui;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -82,5 +83,16 @@ final class StatusBarTest extends TestCase
         $element = StatusBar::new()->render(new Ui());
 
         self::assertCount(0, $element->sections);
+    }
+
+    #[Test]
+    public function leftSectionTextIsPreserved(): void
+    {
+        $element = StatusBar::new()->left('Thermopylae')->render(new Ui());
+
+        self::assertCount(1, $element->sections);
+        $section = $element->sections[0];
+        self::assertInstanceOf(TextElement::class, $section);
+        self::assertSame('Thermopylae', $section->content);
     }
 }

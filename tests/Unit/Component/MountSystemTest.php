@@ -174,6 +174,27 @@ final class MountSystemTest extends TestCase
         $b = $system->mount(SimpleTestComponent::class);
         self::assertFalse($b->isDisposed);
     }
+
+    #[Test]
+    public function provideSuppliesAmbientDependency(): void
+    {
+        $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
+        $service = new ProvidedService('olympus');
+        $system->provide(ProvidedService::class, $service);
+
+        $mounted = $system->mount(ServiceConsumerComponent::class);
+
+        $ctx = new RenderContext(
+            $this->createStub(\Phalanx\Scope\Scope::class),
+            new Ui(),
+            Theme::default(),
+            $system,
+        );
+
+        $result = $mounted->render($ctx);
+        self::assertInstanceOf(TextElement::class, $result);
+        self::assertSame('olympus', $result->content);
+    }
 }
 
 final class SimpleTestComponent implements Component
@@ -245,5 +266,31 @@ final class MountableTestComponent implements Component, Mountable
     public function onUnmount(): void
     {
         $this->tracker->unmounted = true;
+    }
+}
+
+final class ProvidedService
+{
+    public function __construct(
+        private(set) string $name,
+    ) {
+    }
+
+    public function name(): string
+    {
+        return $this->name;
+    }
+}
+
+final class ServiceConsumerComponent implements Component
+{
+    public function __construct(
+        private(set) ProvidedService $service,
+    ) {
+    }
+
+    public function __invoke(RenderContext $ctx): Renderable
+    {
+        return $ctx->ui->text($this->service->name());
     }
 }

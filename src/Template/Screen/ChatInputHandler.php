@@ -23,7 +23,7 @@ final class ChatInputHandler implements Focusable, AcceptsInput
     use TextInputBehavior;
 
     public function __construct(
-        private(set) ChatScreen $screen,
+        private ChatScreen $screen,
     ) {
     }
 

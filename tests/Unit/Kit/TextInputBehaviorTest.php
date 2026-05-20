@@ -50,4 +50,37 @@ final class TextInputBehaviorTest extends TestCase
 
         self::assertFalse($fixture->handle(new KeyEvent('a')));
     }
+
+    #[Test]
+    public function backspaceOnEmptyStringStaysEmpty(): void
+    {
+        $fixture = new TextInputFixture(new Signal(''));
+        $handled = $fixture->handle(new KeyEvent(Key::Backspace));
+
+        self::assertTrue($handled);
+        self::assertNotNull($fixture->signal());
+        self::assertSame('', $fixture->signal()->value);
+    }
+
+    #[Test]
+    public function spaceKeyAppendsSpace(): void
+    {
+        $fixture = new TextInputFixture(new Signal('hello'));
+        $handled = $fixture->handle(new KeyEvent(Key::Space));
+
+        self::assertTrue($handled);
+        self::assertNotNull($fixture->signal());
+        self::assertSame('hello ', $fixture->signal()->value);
+    }
+
+    #[Test]
+    public function backspaceRemovesLastMultiByteCharacter(): void
+    {
+        $fixture = new TextInputFixture(new Signal('αβγ'));
+        $handled = $fixture->handle(new KeyEvent(Key::Backspace));
+
+        self::assertTrue($handled);
+        self::assertNotNull($fixture->signal());
+        self::assertSame('αβ', $fixture->signal()->value);
+    }
 }

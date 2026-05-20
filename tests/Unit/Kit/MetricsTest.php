@@ -65,4 +65,10 @@ final class MetricsTest extends TestCase
         self::assertSame('1m00.0s', Metrics::uptime(60.0));
         self::assertSame('2m30.0s', Metrics::uptime(150.0));
     }
+
+    #[Test]
+    public function memoryFormatsZeroBytes(): void
+    {
+        self::assertSame('0.0K', Metrics::memory(0));
+    }
 }

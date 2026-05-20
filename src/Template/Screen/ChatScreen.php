@@ -9,7 +9,6 @@ use Phalanx\Theatron\Contract\Focusable;
 use Phalanx\Theatron\Contract\HasFocusables;
 use Phalanx\Theatron\Contract\HasStatusBar;
 use Phalanx\Theatron\Contract\Screen;
-use Phalanx\Theatron\Input\InputMode;
 use Phalanx\Theatron\Input\Key;
 use Phalanx\Theatron\Input\KeyEvent;
 use Phalanx\Theatron\Kit\StatusBar;
@@ -64,7 +63,7 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables
 
         return $ctx->ui->column(
             $this->renderConversation($ctx->ui, $conversation, $focusTarget === 'conversation'),
-            $this->renderStreamingIndicator($ctx->ui, $activity),
+            self::renderStreamingIndicator($ctx->ui, $activity),
             $this->renderInput($ctx->ui, $focusTarget === 'input'),
         );
     }
@@ -75,7 +74,7 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables
         $inputMode = $this->store->inputMode;
 
         return StatusBar::new()
-            ->section($this->modeLabel($inputMode->mode), $this->modeColor($inputMode->mode))
+            ->section($inputMode->mode->label(), $inputMode->mode->color())
             ->left(sprintf('Chat  %s', $inputMode->focusTarget ?? ''))
             ->right(sprintf(
                 'Tokens: %d in / %d out',
@@ -170,22 +169,6 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables
         }
 
         return $ui->text('');
-    }
-
-    private static function modeLabel(InputMode $mode): string
-    {
-        return match ($mode) {
-            InputMode::Normal => ' NORMAL ',
-            InputMode::Insert => ' INSERT ',
-        };
-    }
-
-    private static function modeColor(InputMode $mode): Color
-    {
-        return match ($mode) {
-            InputMode::Normal => Color::brightCyan(),
-            InputMode::Insert => Color::brightGreen(),
-        };
     }
 
     private function renderConversation(Ui $ui, ConversationSlice $conversation, bool $focused): Renderable

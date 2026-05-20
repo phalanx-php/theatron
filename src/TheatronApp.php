@@ -15,6 +15,8 @@ use Phalanx\Theatron\Contract\HasStatusBar;
 use Phalanx\Theatron\Contract\Screen;
 use Phalanx\Theatron\Focus\FocusManager;
 use Phalanx\Theatron\Input\InputEvent;
+use Phalanx\Theatron\Input\InputMode;
+use Phalanx\Theatron\Input\InputModeSlice;
 use Phalanx\Theatron\Input\KeyEvent;
 use Phalanx\Theatron\Input\ModeDispatcher;
 use Phalanx\Theatron\Kit\ScreenLayout;
@@ -49,6 +51,15 @@ final class TheatronApp
         $registry->setGlobal($this->globalBindings);
 
         $mountSystem = new MountSystem($scope);
+
+        if ($this->storeClass !== null) {
+            $store = new ($this->storeClass)();
+            $mountSystem->provide($this->storeClass, $store);
+            $mountSystem->provide(Store::class, $store);
+        } else {
+            $store = null;
+        }
+
         $navigator = new WorkspaceNavigator($mountSystem, $this->screens[0]);
         $registry->activateScreen($this->screens[0]);
 
@@ -60,6 +71,15 @@ final class TheatronApp
 
         $focus = new FocusManager();
         $dispatcher = new ModeDispatcher($focus);
+
+        if ($store !== null) {
+            $dispatcher->onModeChange(static function (InputMode $mode, ?string $focusTarget) use ($store): void {
+                $store->mutate(
+                    InputModeSlice::class,
+                    static fn(InputModeSlice $_) => new InputModeSlice($mode, $focusTarget),
+                );
+            });
+        }
 
         self::rebuildFocus($focus, $navigator);
 

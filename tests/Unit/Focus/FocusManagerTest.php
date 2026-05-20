@@ -197,4 +197,39 @@ final class FocusManagerTest extends TestCase
         self::assertNull($manager->activeName());
         self::assertSame(0, $manager->count);
     }
+
+    #[Test]
+    public function resetClearsAllFocusables(): void
+    {
+        $manager = new FocusManager();
+        $manager->register('a', new class () implements Focusable {
+        });
+        $manager->register('b', new class () implements Focusable {
+        });
+        self::assertSame(2, $manager->count);
+
+        $manager->reset();
+
+        self::assertSame(0, $manager->count);
+        self::assertNull($manager->active());
+        self::assertNull($manager->activeName());
+        self::assertSame([], $manager->names());
+    }
+
+    #[Test]
+    public function singleItemCyclesToSelf(): void
+    {
+        $manager = new FocusManager();
+        $solo = new class () implements Focusable {
+        };
+        $manager->register('solo', $solo);
+
+        $manager->next();
+        self::assertSame('solo', $manager->activeName());
+        self::assertSame($solo, $manager->active());
+
+        $manager->previous();
+        self::assertSame('solo', $manager->activeName());
+        self::assertSame($solo, $manager->active());
+    }
 }

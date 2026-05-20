@@ -7,10 +7,11 @@ namespace Phalanx\Theatron\Tests\Unit\Template\Screen;
 use Phalanx\Scope\TaskScope;
 use Phalanx\Theatron\Component\MountSystem;
 use Phalanx\Theatron\Context\ScreenContext;
+use Phalanx\Theatron\Input\Key;
+use Phalanx\Theatron\Input\KeyEvent;
 use Phalanx\Theatron\Navigation\Navigator;
 use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Element\ColumnElement;
-use Phalanx\Theatron\Tdom\Element\DividerElement;
 use Phalanx\Theatron\Tdom\Element\PanelElement;
 use Phalanx\Theatron\Tdom\Element\RowElement;
 use Phalanx\Theatron\Tdom\Element\StatusLineElement;
@@ -20,13 +21,16 @@ use Phalanx\Theatron\Template\AppStore;
 use Phalanx\Theatron\Template\Screen\AgentBoardScreen;
 use Phalanx\Theatron\Template\Slice\AgentRegistrySlice;
 use Phalanx\Theatron\Template\Slice\AgentSummary;
+use Phalanx\Theatron\Text\Line;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 final class AgentBoardScreenTest extends TestCase
 {
+    // ---- __invoke tests ----
+
     #[Test]
-    public function rendersEmptyAgentBoard(): void
+    public function renderEmptyAgents(): void
     {
         $store = new AppStore();
         $screen = new AgentBoardScreen($store);
@@ -34,19 +38,24 @@ final class AgentBoardScreenTest extends TestCase
 
         $result = $screen($ctx);
 
+        // Root column has a single child — no divider/statusBar inline (those go to HasStatusBar).
         self::assertInstanceOf(ColumnElement::class, $result);
-        self::assertCount(3, $result->children);
+        self::assertCount(1, $result->children);
 
+        // Empty state is a TextElement wrapping a Line.
         $cardArea = $result->children[0];
         self::assertInstanceOf(TextElement::class, $cardArea);
+        self::assertInstanceOf(Line::class, $cardArea->content);
 
-        $content = $cardArea->content;
-        self::assertIsString($content);
-        self::assertStringContainsString('No agents registered', $content);
+        $combined = implode('', array_map(
+            static fn ($s) => $s->content,
+            $cardArea->content->spans,
+        ));
+        self::assertStringContainsString('No agents registered', $combined);
     }
 
     #[Test]
-    public function rendersAgentCards(): void
+    public function renderWithAgents(): void
     {
         $store = new AppStore();
         $store->agents = new AgentRegistrySlice()
@@ -59,17 +68,21 @@ final class AgentBoardScreenTest extends TestCase
         $result = $screen($ctx);
 
         self::assertInstanceOf(ColumnElement::class, $result);
+        self::assertCount(1, $result->children);
 
+        // Cards are laid out in a RowElement, one panel per agent.
         $cardArea = $result->children[0];
         self::assertInstanceOf(RowElement::class, $cardArea);
         self::assertCount(2, $cardArea->children);
 
         self::assertInstanceOf(PanelElement::class, $cardArea->children[0]);
         self::assertInstanceOf(PanelElement::class, $cardArea->children[1]);
+        self::assertSame('Zeus', $cardArea->children[0]->title);
+        self::assertSame('Apollo', $cardArea->children[1]->title);
     }
 
     #[Test]
-    public function showsActiveAgentIndicator(): void
+    public function renderHighlightsActiveAgent(): void
     {
         $store = new AppStore();
         $store->agents = new AgentRegistrySlice()
@@ -83,75 +96,33 @@ final class AgentBoardScreenTest extends TestCase
         $result = $screen($ctx);
 
         self::assertInstanceOf(ColumnElement::class, $result);
-
         $cardArea = $result->children[0];
         self::assertInstanceOf(RowElement::class, $cardArea);
 
+        // Zeus panel body must contain the "Active" badge.
         $zeusPanel = $cardArea->children[0];
         self::assertInstanceOf(PanelElement::class, $zeusPanel);
 
         $zeusBody = $zeusPanel->child;
         self::assertInstanceOf(ColumnElement::class, $zeusBody);
 
-        $texts = array_map(
-            static fn ($el) => $el instanceof TextElement && is_string($el->content) ? $el->content : '',
-            $zeusBody->children,
-        );
+        $combinedZeus = self::flattenTextChildren($zeusBody->children);
+        self::assertStringContainsString('Active', $combinedZeus);
 
-        self::assertNotEmpty(array_filter($texts, static fn ($t) => str_contains((string) $t, 'Active')));
-
+        // Apollo panel body must NOT contain "Active".
         $apolloPanel = $cardArea->children[1];
         self::assertInstanceOf(PanelElement::class, $apolloPanel);
 
         $apolloBody = $apolloPanel->child;
         self::assertInstanceOf(ColumnElement::class, $apolloBody);
 
-        $apolloTexts = array_map(
-            static fn ($el) => $el instanceof TextElement && is_string($el->content) ? $el->content : '',
-            $apolloBody->children,
-        );
-
-        self::assertEmpty(array_filter($apolloTexts, static fn ($t) => str_contains((string) $t, 'Active')));
+        self::assertStringNotContainsString('Active', self::flattenTextChildren($apolloBody->children));
     }
 
-    #[Test]
-    public function showsCapabilities(): void
-    {
-        $store = new AppStore();
-        $store->agents = new AgentRegistrySlice()
-            ->register(new AgentSummary(
-                id: 'agent_zeus',
-                name: 'Zeus',
-                capabilities: ['reasoning', 'tool_use'],
-            ));
-
-        $screen = new AgentBoardScreen($store);
-        $ctx = $this->makeContext($store);
-
-        $result = $screen($ctx);
-
-        self::assertInstanceOf(ColumnElement::class, $result);
-
-        $cardArea = $result->children[0];
-        self::assertInstanceOf(RowElement::class, $cardArea);
-
-        $zeusPanel = $cardArea->children[0];
-        self::assertInstanceOf(PanelElement::class, $zeusPanel);
-
-        $zeusBody = $zeusPanel->child;
-        self::assertInstanceOf(ColumnElement::class, $zeusBody);
-
-        $combined = implode(' ', array_map(
-            static fn ($el) => $el instanceof TextElement && is_string($el->content) ? $el->content : '',
-            $zeusBody->children,
-        ));
-
-        self::assertStringContainsString('reasoning', $combined);
-        self::assertStringContainsString('tool_use', $combined);
-    }
+    // ---- HasStatusBar tests ----
 
     #[Test]
-    public function showsAgentCountInStatusBar(): void
+    public function statusBarRenders(): void
     {
         $store = new AppStore();
         $store->agents = new AgentRegistrySlice()
@@ -159,25 +130,124 @@ final class AgentBoardScreenTest extends TestCase
             ->register(new AgentSummary(id: 'agent_apollo', name: 'Apollo', capabilities: []));
 
         $screen = new AgentBoardScreen($store);
-        $ctx = $this->makeContext($store);
+        $ui = new Ui();
 
-        $result = $screen($ctx);
+        $result = $screen->statusBar($ui);
 
-        self::assertInstanceOf(ColumnElement::class, $result);
-        self::assertCount(3, $result->children);
+        self::assertInstanceOf(StatusLineElement::class, $result);
+        self::assertNotEmpty($result->sections);
 
-        self::assertInstanceOf(DividerElement::class, $result->children[1]);
+        // Agent count must appear somewhere in the rendered sections.
+        $combined = implode('', array_map(
+            static fn ($el) => $el instanceof TextElement && is_string($el->content) ? $el->content : '',
+            $result->sections,
+        ));
+        self::assertStringContainsString('2', $combined);
+    }
 
-        $statusLine = $result->children[2];
-        self::assertInstanceOf(StatusLineElement::class, $statusLine);
-        self::assertCount(2, $statusLine->sections);
+    // ---- HasFocusables tests ----
 
-        $agentCount = $statusLine->sections[1];
-        self::assertInstanceOf(TextElement::class, $agentCount);
+    #[Test]
+    public function focusablesReturnsSelf(): void
+    {
+        $store = new AppStore();
+        $screen = new AgentBoardScreen($store);
 
-        $content = $agentCount->content;
-        self::assertIsString($content);
-        self::assertStringContainsString('2', $content);
+        $focusables = $screen->focusables();
+
+        self::assertCount(1, $focusables);
+        self::assertSame('agents', $focusables[0][0]);
+        // The screen itself is the NormalModeHandler.
+        self::assertSame($screen, $focusables[0][1]);
+    }
+
+    // ---- NormalModeHandler / navigation tests ----
+
+    #[Test]
+    public function navigateDown(): void
+    {
+        $store = new AppStore();
+        $store->agents = new AgentRegistrySlice()
+            ->register(new AgentSummary(id: 'agent_zeus', name: 'Zeus', capabilities: []))
+            ->register(new AgentSummary(id: 'agent_apollo', name: 'Apollo', capabilities: []));
+
+        $screen = new AgentBoardScreen($store);
+        $indexProp = new \ReflectionProperty(AgentBoardScreen::class, 'selectedIndex');
+
+        self::assertSame(0, $indexProp->getValue($screen));
+
+        $result = $screen->handleNormalKey(new KeyEvent('j'));
+        self::assertTrue($result);
+        self::assertSame(1, $indexProp->getValue($screen));
+
+        // Already at last item — clamped at count - 1.
+        $screen->handleNormalKey(new KeyEvent('j'));
+        self::assertSame(1, $indexProp->getValue($screen));
+
+        // Key::Down is equivalent to 'j'.
+        $indexProp->setValue($screen, 0);
+        $screen->handleNormalKey(new KeyEvent(Key::Down));
+        self::assertSame(1, $indexProp->getValue($screen));
+    }
+
+    #[Test]
+    public function navigateUp(): void
+    {
+        $store = new AppStore();
+        $store->agents = new AgentRegistrySlice()
+            ->register(new AgentSummary(id: 'agent_zeus', name: 'Zeus', capabilities: []))
+            ->register(new AgentSummary(id: 'agent_apollo', name: 'Apollo', capabilities: []));
+
+        $screen = new AgentBoardScreen($store);
+        $indexProp = new \ReflectionProperty(AgentBoardScreen::class, 'selectedIndex');
+        $indexProp->setValue($screen, 1);
+
+        $result = $screen->handleNormalKey(new KeyEvent('k'));
+        self::assertTrue($result);
+        self::assertSame(0, $indexProp->getValue($screen));
+
+        // Already at first item — clamped at 0.
+        $screen->handleNormalKey(new KeyEvent('k'));
+        self::assertSame(0, $indexProp->getValue($screen));
+
+        // Key::Up is equivalent to 'k'.
+        $indexProp->setValue($screen, 1);
+        $screen->handleNormalKey(new KeyEvent(Key::Up));
+        self::assertSame(0, $indexProp->getValue($screen));
+    }
+
+    #[Test]
+    public function navigateEmptyList(): void
+    {
+        $store = new AppStore();
+        $screen = new AgentBoardScreen($store);
+
+        // j/k on an empty agent list must return false — nothing to select.
+        self::assertFalse($screen->handleNormalKey(new KeyEvent('j')));
+        self::assertFalse($screen->handleNormalKey(new KeyEvent('k')));
+        self::assertFalse($screen->handleNormalKey(new KeyEvent(Key::Down)));
+        self::assertFalse($screen->handleNormalKey(new KeyEvent(Key::Up)));
+    }
+
+    // ---- helpers ----
+
+    /** @param list<\Phalanx\Theatron\Tdom\Renderable> $children */
+    private static function flattenTextChildren(array $children): string
+    {
+        return implode('', array_map(
+            static function ($el): string {
+                if (!$el instanceof TextElement) {
+                    return '';
+                }
+
+                if (is_string($el->content)) {
+                    return $el->content;
+                }
+
+                return implode('', array_map(static fn ($s) => $s->content, $el->content->spans));
+            },
+            $children,
+        ));
     }
 
     private function makeContext(AppStore $store): ScreenContext

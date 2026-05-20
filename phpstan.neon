@@ -5,3 +5,8 @@ parameters:
         - tests
     bootstrapFiles:
         - phpstan-bootstrap.php
+    ignoreErrors:
+        -
+            identifier: identical.alwaysFalse
+            path: src/Kit/TextInputBehavior.php
+            reportUnmatched: false

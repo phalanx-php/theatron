@@ -1,0 +1,212 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Phalanx\Theatron\Tests\Unit\Input;
+
+use Phalanx\Theatron\Contract\AcceptsInput;
+use Phalanx\Theatron\Contract\Focusable;
+use Phalanx\Theatron\Focus\FocusManager;
+use Phalanx\Theatron\Input\InputMode;
+use Phalanx\Theatron\Input\Key;
+use Phalanx\Theatron\Input\KeyEvent;
+use Phalanx\Theatron\Input\ModeDispatcher;
+use Phalanx\Theatron\Input\NormalModeHandler;
+use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\TestCase;
+
+final class ModeDispatcherTest extends TestCase
+{
+    #[Test]
+    public function startsInNormalMode(): void
+    {
+        $focus = new FocusManager();
+        $dispatcher = new ModeDispatcher($focus);
+
+        self::assertSame(InputMode::Normal, $dispatcher->mode);
+    }
+
+    #[Test]
+    public function tabCyclesFocusInNormalMode(): void
+    {
+        $focus = new FocusManager();
+        $focus->register('alpha', new class () implements Focusable {
+        });
+        $focus->register('beta', new class () implements Focusable {
+        });
+
+        $dispatcher = new ModeDispatcher($focus);
+        $dispatcher->dispatch(new KeyEvent(key: Key::Tab));
+
+        self::assertSame('beta', $focus->activeName());
+    }
+
+    #[Test]
+    public function shiftTabCyclesFocusBackward(): void
+    {
+        $focus = new FocusManager();
+        $focus->register('alpha', new class () implements Focusable {
+        });
+        $focus->register('beta', new class () implements Focusable {
+        });
+        $focus->register('gamma', new class () implements Focusable {
+        });
+
+        $dispatcher = new ModeDispatcher($focus);
+        $dispatcher->dispatch(new KeyEvent(key: Key::Tab, shift: true));
+
+        self::assertSame('gamma', $focus->activeName());
+    }
+
+    #[Test]
+    public function iEntersInsertModeOnInputTarget(): void
+    {
+        $focus = new FocusManager();
+        $focus->register('input', new class () implements Focusable, AcceptsInput {
+            public function handleInput(KeyEvent $event): bool
+            {
+                return true;
+            }
+        });
+
+        $dispatcher = new ModeDispatcher($focus);
+        $result = $dispatcher->dispatch(new KeyEvent(key: 'i'));
+
+        self::assertTrue($result);
+        self::assertSame(InputMode::Insert, $dispatcher->mode);
+    }
+
+    #[Test]
+    public function iDoesNothingOnPlainFocusable(): void
+    {
+        $focus = new FocusManager();
+        $focus->register('plain', new class () implements Focusable {
+        });
+
+        $dispatcher = new ModeDispatcher($focus);
+        $result = $dispatcher->dispatch(new KeyEvent(key: 'i'));
+
+        self::assertFalse($result);
+        self::assertSame(InputMode::Normal, $dispatcher->mode);
+    }
+
+    #[Test]
+    public function escapeReturnsToNormalFromInsert(): void
+    {
+        $focus = new FocusManager();
+        $focus->register('input', new class () implements Focusable, AcceptsInput {
+            public function handleInput(KeyEvent $event): bool
+            {
+                return true;
+            }
+        });
+
+        $dispatcher = new ModeDispatcher($focus);
+        $dispatcher->dispatch(new KeyEvent(key: 'i'));
+        self::assertSame(InputMode::Insert, $dispatcher->mode);
+
+        $dispatcher->dispatch(new KeyEvent(key: Key::Escape));
+        self::assertSame(InputMode::Normal, $dispatcher->mode);
+    }
+
+    #[Test]
+    public function insertModeForwardsKeysToActive(): void
+    {
+        $focus = new FocusManager();
+
+        $widget = new class () implements Focusable, AcceptsInput {
+            public int $callCount = 0;
+
+            public function handleInput(KeyEvent $event): bool
+            {
+                $this->callCount++;
+
+                return true;
+            }
+        };
+
+        $focus->register('input', $widget);
+
+        $dispatcher = new ModeDispatcher($focus);
+        $dispatcher->dispatch(new KeyEvent(key: 'i'));
+        $dispatcher->dispatch(new KeyEvent(key: 'a'));
+
+        self::assertSame(1, $widget->callCount);
+    }
+
+    #[Test]
+    public function normalModeJkDispatchesToNormalModeHandler(): void
+    {
+        $focus = new FocusManager();
+
+        $handler = new class () implements NormalModeHandler {
+            public int $callCount = 0;
+
+            public function handleNormalKey(KeyEvent $event): bool
+            {
+                $this->callCount++;
+
+                return true;
+            }
+        };
+
+        $focus->register('list', $handler);
+
+        $dispatcher = new ModeDispatcher($focus);
+        $dispatcher->dispatch(new KeyEvent(key: 'j'));
+        $dispatcher->dispatch(new KeyEvent(key: 'k'));
+
+        self::assertSame(2, $handler->callCount);
+    }
+
+    #[Test]
+    public function onModeChangeCallbackFires(): void
+    {
+        $focus = new FocusManager();
+        $focus->register('input', new class () implements Focusable, AcceptsInput {
+            public function handleInput(KeyEvent $event): bool
+            {
+                return true;
+            }
+        });
+
+        $dispatcher = new ModeDispatcher($focus);
+
+        $received = [];
+        $dispatcher->onModeChange(static function (InputMode $mode, ?string $name) use (&$received): void {
+            $received[] = [$mode, $name];
+        });
+
+        $dispatcher->dispatch(new KeyEvent(key: 'i'));
+
+        self::assertCount(1, $received);
+        self::assertSame(InputMode::Insert, $received[0][0]);
+        self::assertSame('input', $received[0][1]);
+    }
+
+    #[Test]
+    public function autoModeOnFocusChange(): void
+    {
+        $focus = new FocusManager();
+        $focus->register('list', new class () implements Focusable {
+        });
+        $focus->register('input', new class () implements Focusable, AcceptsInput {
+            public function handleInput(KeyEvent $event): bool
+            {
+                return true;
+            }
+        });
+
+        $dispatcher = new ModeDispatcher($focus);
+
+        // Tab to AcceptsInput — should auto-enter Insert
+        $dispatcher->dispatch(new KeyEvent(key: Key::Tab));
+        self::assertSame('input', $focus->activeName());
+        self::assertSame(InputMode::Insert, $dispatcher->mode);
+
+        // Tab back to plain Focusable — should revert to Normal
+        $dispatcher->dispatch(new KeyEvent(key: Key::Tab));
+        self::assertSame('list', $focus->activeName());
+        self::assertSame(InputMode::Normal, $dispatcher->mode);
+    }
+}

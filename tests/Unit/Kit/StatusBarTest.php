@@ -1,0 +1,86 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Phalanx\Theatron\Tests\Unit\Kit;
+
+use Phalanx\Theatron\Kit\StatusBar;
+use Phalanx\Theatron\Style\Color;
+use Phalanx\Theatron\Tdom\Element\StatusLineElement;
+use Phalanx\Theatron\Tdom\Ui;
+use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\TestCase;
+
+final class StatusBarTest extends TestCase
+{
+    #[Test]
+    public function newCreatesInstance(): void
+    {
+        self::assertInstanceOf(StatusBar::class, StatusBar::new());
+    }
+
+    #[Test]
+    public function newAcceptsCustomBackground(): void
+    {
+        $bar = StatusBar::new(Color::indexed(240));
+
+        self::assertInstanceOf(StatusBar::class, $bar);
+    }
+
+    #[Test]
+    public function sectionAddsEntry(): void
+    {
+        $bar = StatusBar::new();
+        $result = $bar->section('hello');
+
+        self::assertSame($bar, $result);
+    }
+
+    #[Test]
+    public function leftAddsFilledSection(): void
+    {
+        $bar = StatusBar::new();
+        $result = $bar->left('left text');
+
+        self::assertSame($bar, $result);
+    }
+
+    #[Test]
+    public function rightAddsUnfilledSection(): void
+    {
+        $bar = StatusBar::new();
+        $result = $bar->right('right text');
+
+        self::assertSame($bar, $result);
+    }
+
+    #[Test]
+    public function renderProducesStatusLineElement(): void
+    {
+        $bar = StatusBar::new()->section('status');
+        $element = $bar->render(new Ui());
+
+        self::assertInstanceOf(StatusLineElement::class, $element);
+    }
+
+    #[Test]
+    public function renderSectionCountMatchesAddedSections(): void
+    {
+        $bar = StatusBar::new()
+            ->left('a')
+            ->section('b')
+            ->right('c');
+
+        $element = $bar->render(new Ui());
+
+        self::assertCount(3, $element->sections);
+    }
+
+    #[Test]
+    public function renderWithNoSectionsProducesEmptyStatusLine(): void
+    {
+        $element = StatusBar::new()->render(new Ui());
+
+        self::assertCount(0, $element->sections);
+    }
+}

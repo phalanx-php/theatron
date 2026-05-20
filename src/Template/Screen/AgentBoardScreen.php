@@ -5,17 +5,37 @@ declare(strict_types=1);
 namespace Phalanx\Theatron\Template\Screen;
 
 use Phalanx\Theatron\Context\ScreenContext;
+use Phalanx\Theatron\Contract\Focusable;
+use Phalanx\Theatron\Contract\HasFocusables;
+use Phalanx\Theatron\Contract\HasStatusBar;
 use Phalanx\Theatron\Contract\Screen;
+use Phalanx\Theatron\Input\Key;
+use Phalanx\Theatron\Input\KeyEvent;
+use Phalanx\Theatron\Input\NormalModeHandler;
+use Phalanx\Theatron\Kit\StatusBar;
+use Phalanx\Theatron\Layout\Border;
+use Phalanx\Theatron\Style\Color;
+use Phalanx\Theatron\Style\Style;
 use Phalanx\Theatron\Tdom\Renderable;
+use Phalanx\Theatron\Tdom\Style as TdomStyle;
 use Phalanx\Theatron\Tdom\Ui;
 use Phalanx\Theatron\Template\AppStore;
-use Phalanx\Theatron\Template\Slice\ActivitySlice;
-use Phalanx\Theatron\Template\Slice\ActivityStatus;
 use Phalanx\Theatron\Template\Slice\AgentRegistrySlice;
 use Phalanx\Theatron\Template\Slice\AgentSummary;
+use Phalanx\Theatron\Text\Line;
+use Phalanx\Theatron\Text\Span;
 
-class AgentBoardScreen implements Screen
+/**
+ * Agent board screen: bordered agent cards with capability badges, active/selected
+ * indicators, j/k navigation, and a status bar with agent count.
+ *
+ * Focusable area:
+ *   'agents' — NormalModeHandler on $this for j/k navigation through the list
+ */
+class AgentBoardScreen implements Screen, HasStatusBar, HasFocusables, NormalModeHandler
 {
+    private int $selectedIndex = 0;
+
     public function __construct(
         private(set) AppStore $store,
     ) {
@@ -24,65 +44,136 @@ class AgentBoardScreen implements Screen
     public function __invoke(ScreenContext $ctx): Renderable
     {
         $agents = $this->store->agents;
-        $activity = $this->store->activity;
 
         return $ctx->ui->column(
-            self::renderAgentCards($ctx->ui, $agents),
-            $ctx->ui->divider(),
-            self::renderStatusBar($ctx->ui, $agents, $activity),
+            self::renderAgentCards($ctx->ui, $agents, $this->selectedIndex),
         );
     }
 
-    private static function renderAgentCards(Ui $ui, AgentRegistrySlice $agents): Renderable
+    public function statusBar(Ui $ui): Renderable
+    {
+        $inputMode = $this->store->inputMode;
+        $agentCount = count($this->store->agents->agents);
+
+        $modeLabel = match ($inputMode->mode) {
+            \Phalanx\Theatron\Input\InputMode::Normal => ' NORMAL ',
+            \Phalanx\Theatron\Input\InputMode::Insert => ' INSERT ',
+        };
+        $modeColor = match ($inputMode->mode) {
+            \Phalanx\Theatron\Input\InputMode::Normal => Color::brightCyan(),
+            \Phalanx\Theatron\Input\InputMode::Insert => Color::brightGreen(),
+        };
+
+        return StatusBar::new()
+            ->section($modeLabel, $modeColor)
+            ->left('Board')
+            ->right(sprintf('Agents: %d', $agentCount))
+            ->render($ui);
+    }
+
+    /** @return list<array{string, Focusable}> */
+    public function focusables(): array
+    {
+        return [['agents', $this]];
+    }
+
+    public function handleNormalKey(KeyEvent $event): bool
+    {
+        $count = count($this->store->agents->agents);
+
+        if ($count === 0) {
+            return false;
+        }
+
+        if ($event->is('j') || $event->is(Key::Down)) {
+            $this->selectedIndex = min($count - 1, $this->selectedIndex + 1);
+
+            return true;
+        }
+
+        if ($event->is('k') || $event->is(Key::Up)) {
+            $this->selectedIndex = max(0, $this->selectedIndex - 1);
+
+            return true;
+        }
+
+        return false;
+    }
+
+    // ---- private render helpers ----
+
+    private static function renderAgentCards(Ui $ui, AgentRegistrySlice $agents, int $selectedIndex): Renderable
     {
         if ($agents->agents === []) {
-            return $ui->text('[muted]No agents registered[/muted]');
+            return $ui->text(
+                Line::from(Span::styled('No agents registered', Style::new()->fg(Color::indexed(242)))),
+            );
         }
 
         $cards = array_map(
-            static fn (AgentSummary $agent) => self::renderAgentCard($ui, $agent, $agents->activeAgentId),
+            static fn (AgentSummary $agent, int $i) => self::renderAgentCard(
+                $ui,
+                $agent,
+                $agents->activeAgentId,
+                $i === $selectedIndex,
+            ),
             $agents->agents,
+            array_keys($agents->agents),
         );
 
         return $ui->row(...$cards);
     }
 
-    private static function renderAgentCard(Ui $ui, AgentSummary $agent, ?string $activeAgentId): Renderable
-    {
+    private static function renderAgentCard(
+        Ui $ui,
+        AgentSummary $agent,
+        ?string $activeAgentId,
+        bool $selected,
+    ): Renderable {
+        $isActive = $agent->id === $activeAgentId;
+
+        $borderColor = match (true) {
+            $isActive => Color::brightCyan(),
+            $selected => Color::brightYellow(),
+            default => Color::indexed(240),
+        };
+
+        $panelStyle = TdomStyle::of(border: Border::Rounded, color: $borderColor);
+
         $lines = [];
 
-        $lines[] = $ui->text('[bold]' . $agent->name . '[/bold]');
-        $lines[] = $ui->text($agent->id);
+        // Agent name — bold, colored by active state
+        $nameStyle = $isActive
+            ? Style::new()->fg(Color::brightCyan())->bold()
+            : Style::new()->fg(Color::brightWhite())->bold();
+        $lines[] = $ui->text(Line::from(Span::styled($agent->name, $nameStyle)));
 
+        // ID — dim
+        $lines[] = $ui->text(Line::from(Span::styled($agent->id, Style::new()->fg(Color::indexed(242)))));
+
+        // Capabilities
         if ($agent->capabilities !== []) {
-            $lines[] = $ui->text('Capabilities:');
+            $lines[] = $ui->text(
+                Line::from(Span::styled('Capabilities:', Style::new()->fg(Color::indexed(250)))),
+            );
 
             foreach ($agent->capabilities as $capability) {
-                $lines[] = $ui->text('  - ' . $capability);
+                $lines[] = $ui->text(
+                    Line::from(
+                        Span::styled('  • ', Style::new()->fg(Color::indexed(244))),
+                        Span::styled($capability, Style::new()->fg(Color::brightWhite())),
+                    ),
+                );
             }
         }
 
-        if ($agent->id === $activeAgentId) {
-            $lines[] = $ui->text('[bold]* Active[/bold]');
+        // Active badge
+        if ($isActive) {
+            $lines[] = $ui->text(
+                Line::from(Span::styled('Active', Style::new()->fg(Color::brightCyan())->bold())),
+            );
         }
 
-        return $ui->panel($agent->name, $ui->column(...$lines));
-    }
-
-    private static function renderStatusBar(Ui $ui, AgentRegistrySlice $agents, ActivitySlice $activity): Renderable
-    {
-        $statusLabel = match ($activity->status) {
-            ActivityStatus::Idle => 'Idle',
-            ActivityStatus::Running => 'Running',
-            ActivityStatus::AwaitingApproval => 'Awaiting Approval',
-            ActivityStatus::Completed => 'Completed',
-            ActivityStatus::Failed => 'Failed',
-            ActivityStatus::Cancelled => 'Cancelled',
-        };
-
-        return $ui->statusLine(
-            $ui->text('Status: ' . $statusLabel),
-            $ui->text('Agents: ' . count($agents->agents)),
-        );
+        return $ui->panel($agent->name, $ui->column(...$lines), style: $panelStyle);
     }
 }

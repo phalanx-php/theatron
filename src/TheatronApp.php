@@ -8,12 +8,16 @@ use Phalanx\Cancellation\Cancelled;
 use Phalanx\Scope\ExecutionScope;
 use Phalanx\Theatron\Binding\Binding;
 use Phalanx\Theatron\Binding\BindingRegistry;
-use Phalanx\Theatron\Buffer\Rect;
 use Phalanx\Theatron\Component\MountSystem;
 use Phalanx\Theatron\Context\ScreenContext;
+use Phalanx\Theatron\Contract\HasFocusables;
+use Phalanx\Theatron\Contract\HasStatusBar;
 use Phalanx\Theatron\Contract\Screen;
+use Phalanx\Theatron\Focus\FocusManager;
 use Phalanx\Theatron\Input\InputEvent;
 use Phalanx\Theatron\Input\KeyEvent;
+use Phalanx\Theatron\Input\ModeDispatcher;
+use Phalanx\Theatron\Kit\ScreenLayout;
 use Phalanx\Theatron\Navigation\WorkspaceNavigator;
 use Phalanx\Theatron\Stage\Stage;
 use Phalanx\Theatron\State\Store;
@@ -51,77 +55,89 @@ final class TheatronApp
         $ui = new Ui($this->theme);
         $screenCtx = new ScreenContext($scope, $ui, $this->theme, $navigator, $mountSystem);
 
-        $mainRegion = $this->stage->region(
-            'main',
-            Rect::of(0, 0, $this->stage->width(), $this->stage->height()),
-        );
+        $layout = ScreenLayout::mainWithStatusBar();
+        $layout->attach($this->stage);
 
-        $this->stage->onResize(static function (int $w, int $h) use ($mainRegion): void {
-            $mainRegion->resize(Rect::of(0, 0, $w, $h));
-        });
+        $focus = new FocusManager();
+        $dispatcher = new ModeDispatcher($focus);
 
-        $this->stage->onDraw(static function () use ($navigator, $mainRegion, $screenCtx): void {
+        self::rebuildFocus($focus, $navigator);
+
+        $this->stage->onDraw(static function () use ($navigator, $layout, $screenCtx): void {
             $workspace = $navigator->activeWorkspace();
 
             if (!$workspace->isDirty) {
                 return;
             }
 
+            $mainRegion = $layout->region('main');
             $renderable = $workspace->render($screenCtx);
             $mainRegion->buffer()->clear();
             Painter::paint($renderable, new PaintContext($mainRegion->area, $mainRegion->buffer()));
             $mainRegion->markDirty();
+
+            $statusRegion = $layout->region('status');
+            $screen = $workspace->screen;
+            if ($screen instanceof HasStatusBar) {
+                $statusRenderable = $screen->statusBar($screenCtx->ui);
+                $statusRegion->buffer()->clear();
+                Painter::paint($statusRenderable, new PaintContext($statusRegion->area, $statusRegion->buffer()));
+                $statusRegion->markDirty();
+            }
         });
 
-        $this->stage->onInput(static function (InputEvent $event) use ($registry, $navigator, $scope): void {
-            if (!$event instanceof KeyEvent) {
-                return;
-            }
-
-            $binding = $registry->resolve($event);
-
-            if ($binding === null) {
-                return;
-            }
-
-            $action = $binding->action;
-
-            if ($action === null) {
-                return;
-            }
-
-            if ($action->isQuit()) {
-                $scope->cancellation()->cancel();
-
-                return;
-            }
-
-            if ($action->isWorkspace()) {
-                /** @var class-string<Screen> $target */
-                $target = $action->target;
-                $navigator->go($target);
-                $registry->activateScreen($target);
-
-                return;
-            }
-
-            if ($action->isAction() && $action->callback !== null) {
-                ($action->callback)();
-
-                return;
-            }
-
-            if ($action->isToggle() && $action->target !== null) {
-                /** @var class-string<\Phalanx\Theatron\Contract\Component> $target */
-                $target = $action->target;
-
-                if ($navigator->hasOverlays()) {
-                    $navigator->dismiss();
-                } else {
-                    $navigator->overlay($target);
+        $this->stage->onInput(
+            static function (InputEvent $event) use ($registry, $navigator, $scope, $focus, $dispatcher): void {
+                if (!$event instanceof KeyEvent) {
+                    return;
                 }
-            }
-        });
+
+                $binding = $registry->resolve($event);
+
+                if ($binding !== null) {
+                    $action = $binding->action;
+
+                    if ($action !== null) {
+                        if ($action->isQuit()) {
+                            $scope->cancellation()->cancel();
+
+                            return;
+                        }
+
+                        if ($action->isWorkspace()) {
+                            /** @var class-string<Screen> $target */
+                            $target = $action->target;
+                            $navigator->go($target);
+                            $registry->activateScreen($target);
+                            self::rebuildFocus($focus, $navigator);
+
+                            return;
+                        }
+
+                        if ($action->isAction() && $action->callback !== null) {
+                            ($action->callback)();
+
+                            return;
+                        }
+
+                        if ($action->isToggle() && $action->target !== null) {
+                            /** @var class-string<\Phalanx\Theatron\Contract\Component> $target */
+                            $target = $action->target;
+
+                            if ($navigator->hasOverlays()) {
+                                $navigator->dismiss();
+                            } else {
+                                $navigator->overlay($target);
+                            }
+
+                            return;
+                        }
+                    }
+                }
+
+                $dispatcher->dispatch($event);
+            },
+        );
 
         $this->stage->start($scope);
 
@@ -146,5 +162,17 @@ final class TheatronApp
     public function globalBindings(): array
     {
         return $this->globalBindings;
+    }
+
+    private static function rebuildFocus(FocusManager $focus, WorkspaceNavigator $navigator): void
+    {
+        $focus->reset();
+        $screen = $navigator->activeWorkspace()->screen;
+
+        if ($screen instanceof HasFocusables) {
+            foreach ($screen->focusables() as [$name, $focusable]) {
+                $focus->register($name, $focusable);
+            }
+        }
     }
 }

@@ -7,171 +7,190 @@ namespace Phalanx\Theatron\Tests\Unit\Template\Overlay;
 use Phalanx\Scope\TaskScope;
 use Phalanx\Theatron\Component\MountSystem;
 use Phalanx\Theatron\Context\RenderContext;
+use Phalanx\Theatron\Layout\Border;
 use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Element\ColumnElement;
 use Phalanx\Theatron\Tdom\Element\PanelElement;
+use Phalanx\Theatron\Tdom\Element\RowElement;
 use Phalanx\Theatron\Tdom\Element\TextElement;
+use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Tdom\Ui;
 use Phalanx\Theatron\Template\AppStore;
 use Phalanx\Theatron\Template\Overlay\DevToolsOverlay;
+use Phalanx\Theatron\Template\Overlay\DevToolsTab;
 use Phalanx\Theatron\Template\Slice\ActivitySlice;
 use Phalanx\Theatron\Template\Slice\AgentRegistrySlice;
 use Phalanx\Theatron\Template\Slice\AgentSummary;
 use Phalanx\Theatron\Template\Slice\ConversationSlice;
-use Phalanx\Theatron\Template\Slice\PendingEffect;
+use Phalanx\Theatron\Text\Line;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 final class DevToolsOverlayTest extends TestCase
 {
     #[Test]
-    public function rendersDevToolsPanel(): void
+    public function rendersColumnWithTabBarAndBody(): void
     {
-        $store = new AppStore();
-        $overlay = new DevToolsOverlay($store);
-        $ctx = $this->makeContext();
+        $overlay = new DevToolsOverlay(new AppStore());
+        $root    = $this->assertColumn($overlay($this->makeContext()));
 
-        $root = $this->assertRootPanel($overlay($ctx));
+        self::assertCount(2, $root->children);
+        self::assertInstanceOf(TextElement::class, $root->children[0]);
 
-        self::assertSame('DevTools', $root->title);
+        $body = $this->assertPanel($root->children[1]);
+        self::assertSame('', $body->title);
 
-        $body = $root->child;
-        self::assertInstanceOf(ColumnElement::class, $body);
-        self::assertCount(3, $body->children);
-
-        $sub0 = $this->getSubPanel($root, 0);
-        $sub1 = $this->getSubPanel($root, 1);
-        $sub2 = $this->getSubPanel($root, 2);
-
-        self::assertSame('Conversation', $sub0->title);
-        self::assertSame('Agents', $sub1->title);
-        self::assertSame('Activity', $sub2->title);
+        $bodyStyle = $body->style;
+        self::assertNotNull($bodyStyle);
+        self::assertSame(Border::Rounded, $bodyStyle->border);
     }
 
     #[Test]
-    public function conversationSectionShowsMessageCount(): void
+    public function defaultTabIsMetrics(): void
+    {
+        $overlay = new DevToolsOverlay(new AppStore());
+
+        self::assertSame(DevToolsTab::Metrics->value, $overlay->activeTab->value);
+    }
+
+    #[Test]
+    public function renderMetricsTabShowsMemory(): void
+    {
+        $overlay = new DevToolsOverlay(new AppStore());
+        $root    = $this->assertColumn($overlay($this->makeContext()));
+
+        $body = $this->assertPanel($root->children[1]);
+        $flat = $this->flattenLines($body->child);
+
+        self::assertStringContainsString('mem:', $flat);
+        self::assertStringContainsString('peak:', $flat);
+    }
+
+    #[Test]
+    public function renderStoreTabShowsSliceInfo(): void
     {
         $store = new AppStore();
         $store->conversation = new ConversationSlice()
-            ->addUserMessage('Sparta does not retreat.')
-            ->appendToken('Nor does Olympus forget its oaths.');
-
-        $overlay = new DevToolsOverlay($store);
-        $root = $this->assertRootPanel($overlay($this->makeContext()));
-
-        $panel = $this->getSubPanel($root, 0);
-        $countText = $this->getPanelBodyRow($panel, 0);
-
-        self::assertSame('Messages: 2', $countText);
-    }
-
-    #[Test]
-    public function conversationSectionShowsStreamingState(): void
-    {
-        $store = new AppStore();
-        $store->conversation = new ConversationSlice()
-            ->addUserMessage('What does Apollo decree?')
-            ->appendToken('The oracle of Delphi speaks...');
-
-        self::assertTrue($store->conversation->isStreaming);
-
-        $overlay = new DevToolsOverlay($store);
-        $root = $this->assertRootPanel($overlay($this->makeContext()));
-
-        $panel = $this->getSubPanel($root, 0);
-        $streamingText = $this->getPanelBodyRow($panel, 1);
-
-        self::assertSame('Streaming: true', $streamingText);
-    }
-
-    #[Test]
-    public function agentsSectionShowsAgentCount(): void
-    {
-        $store = new AppStore();
+            ->addUserMessage('The agora stands.')
+            ->appendToken('As does the phalanx.');
         $store->agents = new AgentRegistrySlice()
-            ->register(new AgentSummary(id: 'agent_leonidas', name: 'Leonidas', capabilities: ['combat', 'tactics']))
-            ->register(new AgentSummary(id: 'agent_themistocles', name: 'Themistocles', capabilities: ['naval']))
-            ->activate('agent_leonidas');
+            ->register(new AgentSummary(id: 'agent_leonidas', name: 'Leonidas', capabilities: ['tactics']));
 
         $overlay = new DevToolsOverlay($store);
-        $root = $this->assertRootPanel($overlay($this->makeContext()));
+        $overlay->activeTab->value = DevToolsTab::Store->value;
 
-        $panel = $this->getSubPanel($root, 1);
-        $countText = $this->getPanelBodyRow($panel, 0);
-        $activeText = $this->getPanelBodyRow($panel, 1);
+        $root = $this->assertColumn($overlay($this->makeContext()));
+        $body = $this->assertPanel($root->children[1]);
+        $flat = $this->flattenLines($body->child);
 
-        self::assertSame('Registered: 2', $countText);
-        self::assertSame('Active: agent_leonidas', $activeText);
+        self::assertStringContainsString('ConversationSlice', $flat);
+        self::assertStringContainsString('AgentRegistrySlice', $flat);
+        self::assertStringContainsString('ActivitySlice', $flat);
+        self::assertStringContainsString('2', $flat);
+        self::assertStringContainsString('1', $flat);
     }
 
     #[Test]
-    public function activitySectionShowsStatus(): void
+    public function renderMetricsTabShowsConversationCounts(): void
     {
         $store = new AppStore();
-        $store->activity = new ActivitySlice()->awaitingApproval(
-            new PendingEffect(kind: 'read_file', summary: 'Read the Spartan codex', arguments: [], hazardLevel: 1),
-        );
+        $store->conversation = new ConversationSlice()
+            ->addUserMessage('Leonidas holds the pass.')
+            ->appendToken('Three hundred stand firm.');
+        $store->activity = new ActivitySlice()->updateUsage(100, 200);
 
         $overlay = new DevToolsOverlay($store);
-        $root = $this->assertRootPanel($overlay($this->makeContext()));
+        $root    = $this->assertColumn($overlay($this->makeContext()));
+        $body    = $this->assertPanel($root->children[1]);
+        $flat    = $this->flattenLines($body->child);
 
-        $panel = $this->getSubPanel($root, 2);
-        $statusText = $this->getPanelBodyRow($panel, 0);
-
-        self::assertSame('Status: Awaiting Approval', $statusText);
+        self::assertStringContainsString('msgs:', $flat);
+        self::assertStringContainsString('in:', $flat);
+        self::assertStringContainsString('out:', $flat);
+        self::assertStringContainsString('total:', $flat);
     }
 
     #[Test]
-    public function activitySectionShowsTokenCounts(): void
+    public function tabBarContainsAllTabLabels(): void
     {
-        $store = new AppStore();
-        $store->activity = new ActivitySlice()->updateUsage(512, 1024);
+        $overlay = new DevToolsOverlay(new AppStore());
+        $root    = $this->assertColumn($overlay($this->makeContext()));
 
-        $overlay = new DevToolsOverlay($store);
-        $root = $this->assertRootPanel($overlay($this->makeContext()));
+        $tabBar = $root->children[0];
+        self::assertInstanceOf(TextElement::class, $tabBar);
+        self::assertInstanceOf(Line::class, $tabBar->content);
 
-        $panel = $this->getSubPanel($root, 2);
-        $tokenText = $this->getPanelBodyRow($panel, 2);
+        $flat = $this->flattenLine($tabBar->content);
+        self::assertStringContainsString('Metrics', $flat);
+        self::assertStringContainsString('Store', $flat);
+        self::assertStringContainsString('Info', $flat);
+    }
 
-        self::assertSame('Tokens: 512 in / 1024 out / 1536 total', $tokenText);
+    #[Test]
+    public function infoTabRendersPlaceholderContent(): void
+    {
+        $overlay = new DevToolsOverlay(new AppStore());
+        $overlay->activeTab->value = DevToolsTab::Info->value;
+
+        $root = $this->assertColumn($overlay($this->makeContext()));
+        $body = $this->assertPanel($root->children[1]);
+        $flat = $this->flattenLines($body->child);
+
+        self::assertStringContainsString('phalanx-theatron', $flat);
+        self::assertStringContainsString('Metrics', $flat);
+        self::assertStringContainsString('Store', $flat);
     }
 
     private function makeContext(): RenderContext
     {
-        $scope = $this->createStub(TaskScope::class);
+        $scope       = $this->createStub(TaskScope::class);
         $mountSystem = new MountSystem($scope);
 
         return new RenderContext($scope, new Ui(), Theme::default(), $mountSystem);
     }
 
-    private function assertRootPanel(mixed $result): PanelElement
+    private function assertColumn(Renderable $element): ColumnElement
     {
-        self::assertInstanceOf(PanelElement::class, $result);
-        return $result;
+        self::assertInstanceOf(ColumnElement::class, $element);
+
+        return $element;
     }
 
-    private function getSubPanel(PanelElement $root, int $index): PanelElement
+    private function assertPanel(Renderable $element): PanelElement
     {
-        $body = $root->child;
-        self::assertInstanceOf(ColumnElement::class, $body);
+        self::assertInstanceOf(PanelElement::class, $element);
 
-        $sub = $body->children[$index];
-        self::assertInstanceOf(PanelElement::class, $sub);
-
-        return $sub;
+        return $element;
     }
 
-    private function getPanelBodyRow(PanelElement $panel, int $index): string
+    private function flattenLines(Renderable $element): string
     {
-        $body = $panel->child;
-        self::assertInstanceOf(ColumnElement::class, $body);
+        if ($element instanceof TextElement) {
+            $content = $element->content;
 
-        $row = $body->children[$index];
-        self::assertInstanceOf(TextElement::class, $row);
+            return $content instanceof Line ? $this->flattenLine($content) : $content;
+        }
 
-        $content = $row->content;
-        self::assertIsString($content);
+        if ($element instanceof PanelElement) {
+            return $this->flattenLines($element->child);
+        }
 
-        return $content;
+        if ($element instanceof ColumnElement) {
+            return implode(' ', array_map($this->flattenLines(...), $element->children));
+        }
+
+        if ($element instanceof RowElement) {
+            return implode(' ', array_map($this->flattenLines(...), $element->children));
+        }
+
+        return '';
+    }
+
+    private function flattenLine(Line $line): string
+    {
+        return implode('', array_map(
+            static fn ($span) => $span->content,
+            $line->spans,
+        ));
     }
 }

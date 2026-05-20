@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Phalanx\Theatron\Tests\Unit\Template;
 
+use Phalanx\Theatron\Input\InputMode;
+use Phalanx\Theatron\Input\InputModeSlice;
 use Phalanx\Theatron\Reactive\Tracker;
 use Phalanx\Theatron\Template\AppStore;
 use Phalanx\Theatron\Template\Slice\ActivitySlice;
@@ -103,6 +105,48 @@ final class AppStoreTest extends TestCase
         self::assertCount(1, $store->conversation->messages);
         self::assertSame('ares-1', $store->agents->activeAgentId);
         self::assertSame(150, $store->activity->totalTokens);
+    }
+
+    #[Test]
+    public function inputModePropertyHookReadsDefaultSlice(): void
+    {
+        $store = new AppStore();
+
+        $slice = $store->inputMode;
+
+        self::assertInstanceOf(InputModeSlice::class, $slice);
+        self::assertSame(InputMode::Normal, $slice->mode);
+        self::assertNull($slice->focusTarget);
+    }
+
+    #[Test]
+    public function inputModePropertyHookWriteUpdatesSlice(): void
+    {
+        $store = new AppStore();
+        $calls = 0;
+
+        $store->subscribe(static function () use (&$calls): void {
+            $calls++;
+        });
+
+        $store->inputMode = new InputModeSlice(InputMode::Insert, 'command-input');
+
+        self::assertSame(1, $calls);
+        self::assertSame(InputMode::Insert, $store->inputMode->mode);
+        self::assertSame('command-input', $store->inputMode->focusTarget);
+    }
+
+    #[Test]
+    public function inputModeSliceIsRegisteredIndependentlyOfOtherSlices(): void
+    {
+        $store = new AppStore();
+
+        $store->inputMode = new InputModeSlice(InputMode::Insert, 'search');
+        $store->conversation = new ConversationSlice()->addUserMessage('Advance.');
+
+        self::assertSame(InputMode::Insert, $store->inputMode->mode);
+        self::assertSame('search', $store->inputMode->focusTarget);
+        self::assertCount(1, $store->conversation->messages);
     }
 
     #[Test]

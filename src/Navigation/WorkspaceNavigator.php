@@ -9,15 +9,6 @@ use Phalanx\Theatron\Component\MountedScreen;
 use Phalanx\Theatron\Component\MountSystem;
 use Phalanx\Theatron\Contract\Screen;
 
-/**
- * Concrete Navigator implementation.
- *
- * Workspaces (Screen classes) are mounted once and persist across go() switches.
- * The inactive workspace is hidden — its signals and subscriptions remain live.
- *
- * Overlays (any Component class) are transient. Each push creates a fresh
- * MountedComponent. Dismiss disposes the component immediately.
- */
 final class WorkspaceNavigator implements Navigator
 {
     /** @var array<class-string<Screen>, MountedScreen> */
@@ -26,18 +17,14 @@ final class WorkspaceNavigator implements Navigator
     /** @var list<MountedComponent> */
     private array $overlayStack = [];
 
-    /** @var class-string<Screen> */
-    private string $activeScreen;
-
     /**
-     * @param class-string<Screen> $initialScreen
+     * @param class-string<Screen> $activeScreen
      */
     public function __construct(
         private(set) MountSystem $mountSystem,
-        string $initialScreen,
+        private string $activeScreen,
     ) {
-        $this->activeScreen = $initialScreen;
-        $this->workspaces[$initialScreen] = $this->mountSystem->mountScreen($initialScreen);
+        $this->workspaces[$this->activeScreen] = $this->mountSystem->mountScreen($this->activeScreen);
     }
 
     /**

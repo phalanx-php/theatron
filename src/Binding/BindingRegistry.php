@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Phalanx\Theatron\Binding;
 
+use Phalanx\Theatron\Input\Key;
 use Phalanx\Theatron\Input\KeyEvent;
 
 /**
@@ -81,7 +82,6 @@ final class BindingRegistry
         }
     }
 
-    /** Remove all overlay layers at once. */
     public function clearOverlays(): void
     {
         $this->overlayStack = [];
@@ -90,22 +90,16 @@ final class BindingRegistry
     // -------------------------------------------------------------------------
     // Resolution
 
-    /**
-     * Walk layers top-down and return the first Binding that matches the event.
-     * Returns null when no binding claims the event.
-     */
     public function resolve(KeyEvent $event): ?Binding
     {
-        // Overlays take priority — most recently pushed overlay is checked first.
-        foreach (array_reverse($this->overlayStack) as $layer) {
-            foreach ($layer['bindings'] as $binding) {
+        for ($i = count($this->overlayStack) - 1; $i >= 0; $i--) {
+            foreach ($this->overlayStack[$i]['bindings'] as $binding) {
                 if ($binding->matches($event)) {
                     return $binding;
                 }
             }
         }
 
-        // Active screen bindings.
         if ($this->activeScreen !== null) {
             $screenBindings = $this->screenBindings[$this->activeScreen] ?? [];
 
@@ -116,7 +110,6 @@ final class BindingRegistry
             }
         }
 
-        // Global fallback.
         foreach ($this->global as $binding) {
             if ($binding->matches($event)) {
                 return $binding;
@@ -138,33 +131,38 @@ final class BindingRegistry
      */
     public function activeBindings(): array
     {
-        // Collect in resolution order; track seen combos to apply shadowing.
         $seen = [];
         $result = [];
 
-        $addIfUnseen = static function (Binding $b) use (&$seen, &$result): void {
-            $key = self::comboKey($b);
+        for ($i = count($this->overlayStack) - 1; $i >= 0; $i--) {
+            foreach ($this->overlayStack[$i]['bindings'] as $binding) {
+                $key = self::comboKey($binding);
 
-            if (!isset($seen[$key])) {
-                $seen[$key] = true;
-                $result[] = $b;
-            }
-        };
-
-        foreach (array_reverse($this->overlayStack) as $layer) {
-            foreach ($layer['bindings'] as $binding) {
-                $addIfUnseen($binding);
+                if (!isset($seen[$key])) {
+                    $seen[$key] = true;
+                    $result[] = $binding;
+                }
             }
         }
 
         if ($this->activeScreen !== null) {
             foreach ($this->screenBindings[$this->activeScreen] ?? [] as $binding) {
-                $addIfUnseen($binding);
+                $key = self::comboKey($binding);
+
+                if (!isset($seen[$key])) {
+                    $seen[$key] = true;
+                    $result[] = $binding;
+                }
             }
         }
 
         foreach ($this->global as $binding) {
-            $addIfUnseen($binding);
+            $key = self::comboKey($binding);
+
+            if (!isset($seen[$key])) {
+                $seen[$key] = true;
+                $result[] = $binding;
+            }
         }
 
         return $result;
@@ -175,7 +173,7 @@ final class BindingRegistry
 
     private static function comboKey(Binding $b): string
     {
-        $k = $b->key instanceof \Phalanx\Theatron\Input\Key ? $b->key->value : $b->key;
+        $k = $b->key instanceof Key ? $b->key->value : $b->key;
 
         return ($b->ctrl ? 'c' : '-') . ($b->alt ? 'a' : '-') . ($b->shift ? 's' : '-') . ':' . $k;
     }

@@ -162,7 +162,7 @@ final class BindingHintsFormatterTest extends TestCase
     }
 
     #[Test]
-    public function threeBindingsProduceNineChildren(): void
+    public function threeBindingsProduceEightChildren(): void
     {
         // Olympus — three bindings, two separators
         $quit  = Binding::ctrl('c')->quit()->label('Quit');

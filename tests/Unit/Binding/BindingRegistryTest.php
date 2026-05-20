@@ -289,6 +289,19 @@ final class BindingRegistryTest extends TestCase
         self::assertSame('help', $match?->label);
     }
 
+    #[Test]
+    public function multipleOverlaysWithDifferentKeysResolveIndependently(): void
+    {
+        $escBinding = Binding::key(Key::Escape)->quit()->label('dismiss-a');
+        $f1Binding = Binding::key(Key::F1)->quit()->label('help-b');
+
+        $this->registry->pushOverlay('modal-a', [$escBinding]);
+        $this->registry->pushOverlay('modal-b', [$f1Binding]);
+
+        self::assertSame('dismiss-a', $this->registry->resolve(new KeyEvent(key: Key::Escape))?->label);
+        self::assertSame('help-b', $this->registry->resolve(new KeyEvent(key: Key::F1))?->label);
+    }
+
     // -------------------------------------------------------------------------
     // activeBindings / shadowing
 

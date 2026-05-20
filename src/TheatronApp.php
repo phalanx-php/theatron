@@ -17,14 +17,6 @@ use Phalanx\Theatron\Stage\Stage;
 use Phalanx\Theatron\State\Store;
 use Phalanx\Theatron\Styling\Theme;
 
-/**
- * Assembled Theatron application.
- *
- * Produced by {@see TheatronBuilder::build()}. Call {@see start()} with an
- * ExecutionScope to enter the TUI loop. The scope's cancellation drives the
- * exit condition — cancel it (e.g. via a Ctrl+C binding) to stop the app and
- * restore the terminal.
- */
 final class TheatronApp
 {
     /**
@@ -42,13 +34,6 @@ final class TheatronApp
     ) {
     }
 
-    /**
-     * Start the TUI event loop.
-     *
-     * Blocks (via cooperative suspension) until the scope is cancelled.
-     * Cancelling the scope triggers cleanup: Stage.stop() restores the
-     * terminal and exits alternate screen mode.
-     */
     public function start(ExecutionScope $scope): void
     {
         $registry = new BindingRegistry();
@@ -58,7 +43,6 @@ final class TheatronApp
         $navigator = new WorkspaceNavigator($mountSystem, $this->screens[0]);
         $registry->activateScreen($this->screens[0]);
 
-        // Wire input through binding registry first, then navigator.
         $this->stage->onInput(static function (InputEvent $event) use ($registry, $navigator, $scope): void {
             if (!$event instanceof KeyEvent) {
                 return;

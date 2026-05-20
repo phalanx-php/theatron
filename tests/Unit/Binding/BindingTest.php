@@ -50,7 +50,7 @@ final class BindingTest extends TestCase
     // Factory shapes
 
     #[Test]
-    public function ctrlFactorySetsCrtlFlag(): void
+    public function ctrlFactorySetsCtrlFlag(): void
     {
         $b = Binding::ctrl('c');
 
@@ -256,5 +256,16 @@ final class BindingTest extends TestCase
         $b = Binding::key(Key::Escape);
 
         self::assertNull($b->action);
+    }
+
+    #[Test]
+    public function matchesRequiresAllModifiers(): void
+    {
+        $b = Binding::ctrl('c');
+
+        self::assertFalse(
+            $b->matches(new KeyEvent(key: 'c', ctrl: true, alt: true)),
+            'Extra alt modifier must prevent match',
+        );
     }
 }

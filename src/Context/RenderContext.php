@@ -34,14 +34,6 @@ class RenderContext
         return $this->mountSystem->mount($component, ...$params);
     }
 
-    /**
-     * Returns a Renderable row of key-hint chips for all currently active
-     * bindings. When no BindingRegistry is wired, returns an empty row.
-     *
-     * Typical usage in a component's render method:
-     *
-     *   return $ctx->ui->column($body, $ctx->hints());
-     */
     public function hints(): Renderable
     {
         if ($this->bindings === null) {

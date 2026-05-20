@@ -13,20 +13,6 @@ use Phalanx\Theatron\Stage\StageConfig;
 use Phalanx\Theatron\State\Store;
 use Phalanx\Theatron\Styling\Theme;
 
-/**
- * Registers Theatron runtime services into the Aegis container.
- *
- * Wired services:
- *   - Stage        — tick loop, rendering, input dispatch
- *   - BindingRegistry — layered key-binding resolver
- *   - Theme        — visual styling defaults
- *   - Store        — optional; only registered when storeClass is provided
- *
- * The NavigatorConfig (screen list) is intentionally not registered here
- * because the WorkspaceNavigator requires a first-screen class-string at
- * construction time, which is known only after TheatronBuilder is fully
- * configured. TheatronApp wires the navigator directly.
- */
 final class TheatronServiceBundle extends ServiceBundle
 {
     /**
@@ -50,9 +36,7 @@ final class TheatronServiceBundle extends ServiceBundle
             ->factory(static fn(): StageConfig => $config);
 
         $services->singleton(Stage::class)
-            ->factory(static function () use ($config): Stage {
-                return Stage::boot($config);
-            });
+            ->factory(static fn(): Stage => Stage::boot($config));
 
         $services->singleton(BindingRegistry::class)
             ->factory(static fn(): BindingRegistry => new BindingRegistry());

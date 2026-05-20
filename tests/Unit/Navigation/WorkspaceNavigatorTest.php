@@ -223,18 +223,6 @@ final class WorkspaceNavigatorTest extends TestCase
     }
 
     #[Test]
-    public function inactiveWorkspaceSignalsStayLive(): void
-    {
-        $nav = new WorkspaceNavigator($this->makeSystem(), ZeusScreen::class);
-
-        $zeusMounted = $nav->activeWorkspace();
-
-        $nav->go(ApolloScreen::class);
-
-        self::assertFalse($zeusMounted->isDisposed);
-    }
-
-    #[Test]
     public function multipleWorkspacesSwitchCorrectly(): void
     {
         $nav = new WorkspaceNavigator($this->makeSystem(), ZeusScreen::class);
@@ -358,6 +346,21 @@ final class WorkspaceNavigatorTest extends TestCase
         $nav->dismissAll();
 
         self::assertFalse($workspace->isDisposed, 'Dismiss must not affect workspace');
+    }
+
+    #[Test]
+    public function overlaysSurviveWorkspaceSwitch(): void
+    {
+        $nav = new WorkspaceNavigator($this->makeSystem(), ZeusScreen::class);
+
+        $nav->overlay(SpartaOverlay::class);
+        $overlay = $nav->overlays()[0];
+
+        $nav->go(ApolloScreen::class);
+
+        self::assertTrue($nav->hasOverlays(), 'Overlays persist across go()');
+        self::assertFalse($overlay->isDisposed, 'Overlay not disposed on workspace switch');
+        self::assertSame(ApolloScreen::class, $nav->active());
     }
 
     private function makeSystem(): MountSystem

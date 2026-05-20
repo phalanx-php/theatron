@@ -2,6 +2,7 @@
 *.md
 
 !.gitignore
+!README.md
 
 /vendor/
 /.phpunit.cache/

@@ -7,6 +7,7 @@ namespace Phalanx\Theatron\Template\Overlay;
 enum DevToolsTab: int
 {
     case Metrics = 0;
-    case Store = 1;
-    case Info = 2;
+    case Signals = 1;
+    case Tree = 2;
+    case Store = 3;
 }

@@ -376,6 +376,82 @@ final class MountedComponentTest extends TestCase
         self::assertEmpty($deps, 'Tracker frame must be clean after exception in component render');
     }
 
+    #[Test]
+    public function signalCountReflectsOwnedSignals(): void
+    {
+        $component = new class () implements Component {
+            public function __construct(
+                private(set) Signal $alpha = new Signal(0),
+                private(set) Signal $beta = new Signal(''),
+            ) {
+            }
+
+            public function __invoke(RenderContext $ctx): Renderable
+            {
+                return $ctx->ui->text('test');
+            }
+        };
+
+        $batch = new DirtyBatch();
+        $scanResult = SignalScanner::scan($component, $batch);
+        $mounted = new MountedComponent($component, $batch, $scanResult);
+
+        self::assertSame(2, $mounted->signalCount);
+    }
+
+    #[Test]
+    public function subscriptionCountReflectsSubscriptions(): void
+    {
+        $signal = new Signal(0);
+
+        $component = new class ($signal) implements Component {
+            public function __construct(
+                private(set) Signal $external,
+                private(set) Signal $local = new Signal(''),
+            ) {
+            }
+
+            public function __invoke(RenderContext $ctx): Renderable
+            {
+                return $ctx->ui->text((string) $this->external->value);
+            }
+        };
+
+        $batch = new DirtyBatch();
+        $scanResult = SignalScanner::scan($component, $batch, ['external' => $signal]);
+        $mounted = new MountedComponent($component, $batch, $scanResult);
+
+        self::assertGreaterThan(0, $mounted->subscriptionCount);
+    }
+
+    #[Test]
+    public function countsReturnZeroAfterDispose(): void
+    {
+        $component = new class () implements Component {
+            public function __construct(
+                private(set) Signal $alpha = new Signal(0),
+                private(set) Signal $beta = new Signal(''),
+            ) {
+            }
+
+            public function __invoke(RenderContext $ctx): Renderable
+            {
+                return $ctx->ui->text('test');
+            }
+        };
+
+        $batch = new DirtyBatch();
+        $scanResult = SignalScanner::scan($component, $batch);
+        $mounted = new MountedComponent($component, $batch, $scanResult);
+
+        self::assertSame(2, $mounted->signalCount);
+
+        $mounted->dispose();
+
+        self::assertSame(0, $mounted->signalCount);
+        self::assertSame(0, $mounted->subscriptionCount);
+    }
+
     private function createMounted(Component $component): MountedComponent
     {
         $batch = new DirtyBatch();

@@ -42,6 +42,7 @@
 
     <!-- PHP 8.4 property hooks: spacing rules misfire on hook syntax -->
     <rule ref="PSR2.Classes.PropertyDeclaration.SpacingAfterType">
+        <exclude-pattern>*/MountedComponent.php</exclude-pattern>
         <exclude-pattern>*/Span.php</exclude-pattern>
         <exclude-pattern>*/Line.php</exclude-pattern>
         <exclude-pattern>*/Padding.php</exclude-pattern>

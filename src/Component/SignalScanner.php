@@ -6,6 +6,7 @@ namespace Phalanx\Theatron\Component;
 
 use Phalanx\Theatron\Reactive\DirtyBatch;
 use Phalanx\Theatron\Reactive\Signal;
+use Phalanx\Theatron\Reactive\SignalRegistry;
 use Phalanx\Theatron\State\Store;
 use ReflectionClass;
 use ReflectionNamedType;
@@ -13,8 +14,12 @@ use ReflectionNamedType;
 final class SignalScanner
 {
     /** @param array<string, mixed> $runtimeParams */
-    public static function scan(object $component, DirtyBatch $batch, array $runtimeParams = []): SignalScanResult
-    {
+    public static function scan(
+        object $component,
+        DirtyBatch $batch,
+        array $runtimeParams = [],
+        ?SignalRegistry $registry = null,
+    ): SignalScanResult {
         $ownedSignals = [];
         $subscriptions = [];
         $storeSubscriptions = [];
@@ -48,6 +53,7 @@ final class SignalScanner
 
                 if (!isset($borrowed[spl_object_id($value)])) {
                     $ownedSignals[] = $value;
+                    $registry?->register($value, $ref->getShortName() . '::' . $prop->getName());
                 }
             } elseif (is_a($typeName, Store::class, true)) {
                 $value = $prop->getValue($component);

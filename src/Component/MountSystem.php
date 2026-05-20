@@ -11,10 +11,11 @@ use Phalanx\Theatron\Contract\Component;
 use Phalanx\Theatron\Contract\Mountable;
 use Phalanx\Theatron\Contract\Screen;
 use Phalanx\Theatron\Reactive\DirtyBatch;
+use Phalanx\Theatron\Reactive\SignalRegistry;
 use ReflectionClass;
 use ReflectionNamedType;
 
-class MountSystem
+final class MountSystem
 {
     /** @var list<MountedComponent> */
     private array $mounted = [];
@@ -25,6 +26,7 @@ class MountSystem
     public function __construct(
         private(set) Scope $scope,
         private ?TaskScope $taskScope = null,
+        private ?SignalRegistry $registry = null,
     ) {
     }
 
@@ -49,7 +51,7 @@ class MountSystem
         $instance = self::resolveInstance($component, $namedParams, $this->scope, $this->provided);
         $dirty = new DirtyBatch();
 
-        $scanResult = SignalScanner::scan($instance, $dirty, $namedParams);
+        $scanResult = SignalScanner::scan($instance, $dirty, $namedParams, $this->registry);
         $mounted = new MountedComponent($instance, $dirty, $scanResult);
         $this->mounted[] = $mounted;
 
@@ -77,7 +79,7 @@ class MountSystem
         $instance = self::resolveInstance($screen, $namedParams, $this->scope, $this->provided);
         $dirty = new DirtyBatch();
 
-        $scanResult = SignalScanner::scan($instance, $dirty, $namedParams);
+        $scanResult = SignalScanner::scan($instance, $dirty, $namedParams, $this->registry);
         $mounted = new MountedScreen($instance, $dirty, $scanResult);
 
         if ($this->taskScope !== null) {
@@ -91,6 +93,12 @@ class MountSystem
         }
 
         return $mounted;
+    }
+
+    /** @return list<MountedComponent> */
+    public function mounted(): array
+    {
+        return $this->mounted;
     }
 
     public function disposeAll(): void

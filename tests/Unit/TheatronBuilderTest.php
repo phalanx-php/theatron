@@ -11,6 +11,7 @@ use Phalanx\Service\Services;
 use Phalanx\Theatron\Binding\Binding;
 use Phalanx\Theatron\Context\ScreenContext;
 use Phalanx\Theatron\Contract\Screen;
+use Phalanx\Theatron\Reactive\SignalRegistry;
 use Phalanx\Theatron\Stage\ScreenMode;
 use Phalanx\Theatron\Stage\StageConfig;
 use Phalanx\Theatron\State\Store;
@@ -197,6 +198,27 @@ final class TheatronBuilderTest extends TestCase
             ->build();
 
         self::assertTrue($app->devtools);
+    }
+
+    #[Test]
+    public function devtoolsBuildCreatesSignalRegistry(): void
+    {
+        $app = Theatron::app()
+            ->screens([OlympusScreen::class])
+            ->devtools()
+            ->build();
+
+        self::assertInstanceOf(SignalRegistry::class, $app->registry);
+    }
+
+    #[Test]
+    public function buildWithoutDevtoolsHasNullRegistry(): void
+    {
+        $app = Theatron::app()
+            ->screens([OlympusScreen::class])
+            ->build();
+
+        self::assertNull($app->registry);
     }
 
     #[Test]

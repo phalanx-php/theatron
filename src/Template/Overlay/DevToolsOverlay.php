@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace Phalanx\Theatron\Template\Overlay;
 
+use Phalanx\Theatron\Component\ComponentTreeNode;
+use Phalanx\Theatron\Component\MountSystem;
 use Phalanx\Theatron\Context\RenderContext;
 use Phalanx\Theatron\Contract\Component;
 use Phalanx\Theatron\Kit\Metrics;
 use Phalanx\Theatron\Layout\Border;
 use Phalanx\Theatron\Layout\Size;
 use Phalanx\Theatron\Reactive\Signal;
+use Phalanx\Theatron\Reactive\SignalRegistry;
 use Phalanx\Theatron\Style\Color;
 use Phalanx\Theatron\Style\Style as TextStyle;
 use Phalanx\Theatron\Tdom\Renderable;
@@ -20,12 +23,14 @@ use Phalanx\Theatron\Template\Slice\ActivityStatus;
 use Phalanx\Theatron\Text\Line;
 use Phalanx\Theatron\Text\Span;
 
-class DevToolsOverlay implements Component
+final class DevToolsOverlay implements Component
 {
     private(set) Signal $activeTab;
 
     public function __construct(
         private(set) AppStore $store,
+        private(set) MountSystem $mountSystem,
+        private(set) SignalRegistry $registry,
     ) {
         $this->activeTab = new Signal(0);
     }
@@ -38,7 +43,7 @@ class DevToolsOverlay implements Component
             self::renderTabBar($ctx->ui, $tab),
             $ctx->ui->panel(
                 '',
-                self::renderTabContent($ctx->ui, $tab, $this->store),
+                self::renderTabContent($ctx->ui, $tab, $this->store, $this->mountSystem, $this->registry),
                 style: Style::of(size: Size::fill(), border: Border::Rounded, color: Color::indexed(208)),
             ),
         );
@@ -46,7 +51,7 @@ class DevToolsOverlay implements Component
 
     private static function renderTabBar(Ui $ui, int $activeTab): Renderable
     {
-        $tabs = ['Metrics', 'Store', 'Info'];
+        $tabs = ['Metrics', 'Signals', 'Tree', 'Store'];
         $spans = [Span::styled(' ', TextStyle::new())];
 
         foreach ($tabs as $i => $label) {
@@ -58,30 +63,42 @@ class DevToolsOverlay implements Component
         }
 
         $spans[] = Span::styled(
-            '  1/2/3:tab F12:close',
+            '  1/2/3/4:tab F12:close',
             TextStyle::new()->fg(Color::indexed(242)),
         );
 
         return $ui->text(Line::from(...$spans), Style::of(size: Size::fill()));
     }
 
-    private static function renderTabContent(Ui $ui, int $tab, AppStore $store): Renderable
-    {
+    private static function renderTabContent(
+        Ui $ui,
+        int $tab,
+        AppStore $store,
+        MountSystem $mountSystem,
+        SignalRegistry $registry,
+    ): Renderable {
         return match ($tab) {
-            DevToolsTab::Store->value => self::renderStoreTab($ui, $store),
-            DevToolsTab::Info->value  => self::renderInfoTab($ui),
-            default                   => self::renderMetricsTab($ui, $store),
+            DevToolsTab::Signals->value => self::renderSignalsTab($ui, $registry),
+            DevToolsTab::Tree->value    => self::renderTreeTab($ui, $mountSystem),
+            DevToolsTab::Store->value   => self::renderStoreTab($ui, $store),
+            default                     => self::renderMetricsTab($ui, $store, $mountSystem, $registry),
         };
     }
 
-    private static function renderMetricsTab(Ui $ui, AppStore $store): Renderable
-    {
+    private static function renderMetricsTab(
+        Ui $ui,
+        AppStore $store,
+        MountSystem $mountSystem,
+        SignalRegistry $registry,
+    ): Renderable {
         $conv     = $store->conversation;
         $agents   = $store->agents;
         $activity = $store->activity;
 
-        $memReal = memory_get_usage(real_usage: true);
-        $memPeak = memory_get_peak_usage(real_usage: true);
+        $memReal     = memory_get_usage(real_usage: true);
+        $memZend     = memory_get_usage(real_usage: false);
+        $peakReal    = memory_get_peak_usage(real_usage: true);
+        $peakZend    = memory_get_peak_usage(real_usage: false);
 
         $rows = [];
 
@@ -132,14 +149,103 @@ class DevToolsOverlay implements Component
 
         $rows[] = $ui->row(
             $ui->text(
-                self::label('mem', Metrics::memory($memReal)),
+                self::label('mem/r', Metrics::memory($memReal)),
                 Style::of(size: Size::fixed(14)),
             ),
             $ui->text(
-                self::label('peak', Metrics::memory($memPeak)),
+                self::label('mem/z', Metrics::memory($memZend)),
+                Style::of(size: Size::fixed(14)),
+            ),
+            $ui->text(
+                self::label('peak/r', Metrics::memory($peakReal)),
+                Style::of(size: Size::fixed(16)),
+            ),
+            $ui->text(
+                self::label('peak/z', Metrics::memory($peakZend)),
+                Style::of(size: Size::fixed(16)),
+            ),
+        );
+
+        $rows[] = $ui->row(
+            $ui->text(
+                self::label('comps', (string) count($mountSystem->mounted())),
+                Style::of(size: Size::fixed(14)),
+            ),
+            $ui->text(
+                self::label('sigs', (string) $registry->count()),
                 Style::of(size: Size::fixed(14)),
             ),
         );
+
+        return $ui->column(...$rows);
+    }
+
+    private static function renderSignalsTab(Ui $ui, SignalRegistry $registry): Renderable
+    {
+        $snapshots = $registry->snapshot();
+        $headStyle = TextStyle::new()->fg(Color::indexed(245))->bold();
+        $rows      = [];
+
+        $rows[] = $ui->text(Line::from(
+            Span::styled(' Signal', $headStyle),
+            Span::styled(str_repeat(' ', 20), TextStyle::new()),
+            Span::styled('Value', $headStyle),
+            Span::styled(str_repeat(' ', 20), TextStyle::new()),
+            Span::styled('Subs', $headStyle),
+        ));
+
+        foreach ($snapshots as $snapshot) {
+            $nameColor  = $snapshot->isDisposed ? Color::indexed(242) : Color::brightCyan();
+            $valueColor = $snapshot->isDisposed ? Color::indexed(242) : Color::brightWhite();
+
+            $rows[] = $ui->text(Line::from(
+                Span::styled(" {$snapshot->label}", TextStyle::new()->fg($nameColor)),
+                Span::styled(' = ', TextStyle::new()->fg(Color::indexed(245))),
+                Span::styled($snapshot->value, TextStyle::new()->fg($valueColor)),
+                Span::styled(" ({$snapshot->subscriberCount})", TextStyle::new()->fg(Color::indexed(242))),
+            ));
+        }
+
+        if ($snapshots === []) {
+            $rows[] = $ui->text(Line::from(
+                Span::styled(' No signals registered', TextStyle::new()->fg(Color::indexed(242))),
+            ));
+        }
+
+        return $ui->column(...$rows);
+    }
+
+    private static function renderTreeTab(Ui $ui, MountSystem $mountSystem): Renderable
+    {
+        $nodes = [];
+
+        foreach ($mountSystem->mounted() as $mounted) {
+            $nodes[] = new ComponentTreeNode(
+                class: $mounted->component::class,
+                signalCount: $mounted->signalCount,
+                subscriptionCount: $mounted->subscriptionCount,
+            );
+        }
+
+        $rows = [];
+
+        foreach ($nodes as $node) {
+            $pos = strrpos($node->class, '\\');
+            $shortClass = $pos !== false ? substr($node->class, $pos + 1) : $node->class;
+
+            $rows[] = $ui->text(Line::from(
+                Span::styled(' ', TextStyle::new()),
+                Span::styled($shortClass, TextStyle::new()->fg(Color::brightCyan())->bold()),
+                Span::styled(" sig:{$node->signalCount}", TextStyle::new()->fg(Color::indexed(242))),
+                Span::styled(" sub:{$node->subscriptionCount}", TextStyle::new()->fg(Color::indexed(242))),
+            ));
+        }
+
+        if ($nodes === []) {
+            $rows[] = $ui->text(Line::from(
+                Span::styled(' No components mounted', TextStyle::new()->fg(Color::indexed(242))),
+            ));
+        }
 
         return $ui->column(...$rows);
     }
@@ -196,29 +302,6 @@ class DevToolsOverlay implements Component
         ));
 
         return $ui->column(...$rows);
-    }
-
-    private static function renderInfoTab(Ui $ui): Renderable
-    {
-        $dimStyle    = TextStyle::new()->fg(Color::indexed(245));
-        $brightStyle = TextStyle::new()->fg(Color::brightWhite());
-
-        return $ui->column(
-            $ui->text(Line::from(
-                Span::styled(' phalanx-theatron', TextStyle::new()->fg(Color::indexed(208))->bold()),
-            )),
-            $ui->text(Line::from(
-                Span::styled(' Component tree and signal inspection ', $dimStyle),
-                Span::styled('require DevTools runtime.', $brightStyle),
-            )),
-            $ui->text(Line::from(
-                Span::styled(' Available tabs:', $dimStyle),
-                Span::styled(' Metrics ', $brightStyle),
-                Span::styled('(runtime data)', $dimStyle),
-                Span::styled('  Store ', $brightStyle),
-                Span::styled('(slice snapshot)', $dimStyle),
-            )),
-        );
     }
 
     private static function label(string $name, string $value): Line

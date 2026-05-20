@@ -11,6 +11,7 @@ use Phalanx\Theatron\Context\RenderContext;
 use Phalanx\Theatron\Contract\Component;
 use Phalanx\Theatron\Contract\Mountable;
 use Phalanx\Theatron\Reactive\Signal;
+use Phalanx\Theatron\Reactive\SignalRegistry;
 use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Element\TextElement;
 use Phalanx\Theatron\Tdom\Renderable;
@@ -176,6 +177,88 @@ final class MountSystemTest extends TestCase
     }
 
     #[Test]
+    public function mountedReturnsAllMountedComponents(): void
+    {
+        $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
+
+        self::assertCount(0, $system->mounted());
+
+        $system->mount(SimpleTestComponent::class);
+        $system->mount(SimpleTestComponent::class);
+
+        self::assertCount(2, $system->mounted());
+    }
+
+    #[Test]
+    public function mountedReturnsCopyNotReference(): void
+    {
+        $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
+
+        $system->mount(SimpleTestComponent::class);
+
+        $copy = $system->mounted();
+        $copy[] = $system->mount(SimpleTestComponent::class);
+
+        self::assertCount(2, $system->mounted(), 'Mutating returned array must not affect internal list');
+    }
+
+    #[Test]
+    public function disposeAllClearsMountedList(): void
+    {
+        $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
+
+        $system->mount(SimpleTestComponent::class);
+        $system->mount(SimpleTestComponent::class);
+
+        self::assertCount(2, $system->mounted());
+
+        $system->disposeAll();
+
+        self::assertCount(0, $system->mounted());
+    }
+
+    #[Test]
+    public function mountThreadsRegistryToScanner(): void
+    {
+        $registry = new SignalRegistry();
+        $system = new MountSystem(
+            $this->createStub(\Phalanx\Scope\Scope::class),
+            registry: $registry,
+        );
+
+        $system->mount(SignalHoldingComponent::class);
+
+        $snapshot = $registry->snapshot();
+        self::assertCount(1, $snapshot);
+        self::assertStringEndsWith('::counter', $snapshot[0]->label);
+    }
+
+    #[Test]
+    public function mountWithoutRegistrySkipsRegistration(): void
+    {
+        $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
+
+        $mounted = $system->mount(SignalHoldingComponent::class);
+
+        self::assertSame(1, $mounted->signalCount);
+    }
+
+    #[Test]
+    public function borrowedSignalIsNotRegistered(): void
+    {
+        $registry = new SignalRegistry();
+        $shared = new Signal('parent-owned');
+        $system = new MountSystem(
+            $this->createStub(\Phalanx\Scope\Scope::class),
+            registry: $registry,
+        );
+
+        $system->mount(BorrowedOnlyComponent::class, input: $shared);
+
+        self::assertSame(0, $registry->count());
+    }
+
+    #[Test]
     public function provideSuppliesAmbientDependency(): void
     {
         $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
@@ -292,5 +375,31 @@ final class ServiceConsumerComponent implements Component
     public function __invoke(RenderContext $ctx): Renderable
     {
         return $ctx->ui->text($this->service->name());
+    }
+}
+
+final class SignalHoldingComponent implements Component
+{
+    public function __construct(
+        private(set) Signal $counter = new Signal(0),
+    ) {
+    }
+
+    public function __invoke(RenderContext $ctx): Renderable
+    {
+        return $ctx->ui->text((string) $this->counter->value);
+    }
+}
+
+final class BorrowedOnlyComponent implements Component
+{
+    public function __construct(
+        private(set) Signal $input,
+    ) {
+    }
+
+    public function __invoke(RenderContext $ctx): Renderable
+    {
+        return $ctx->ui->text((string) $this->input->value);
     }
 }

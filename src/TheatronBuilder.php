@@ -9,6 +9,7 @@ use Phalanx\Boot\AppContext;
 use Phalanx\Service\ServiceBundle;
 use Phalanx\Theatron\Binding\Binding;
 use Phalanx\Theatron\Contract\Screen;
+use Phalanx\Theatron\Reactive\SignalRegistry;
 use Phalanx\Theatron\Stage\Stage;
 use Phalanx\Theatron\Stage\StageConfig;
 use Phalanx\Theatron\State\Store;
@@ -107,6 +108,8 @@ final class TheatronBuilder
             throw new InvalidArgumentException('At least one screen must be registered via screens().');
         }
 
+        $registry = $this->devtools ? new SignalRegistry() : null;
+
         $theme = $this->theme ?? Theme::default();
         $stage = Stage::boot($this->stageConfig);
 
@@ -117,6 +120,7 @@ final class TheatronBuilder
             globalBindings: $this->globalBindings,
             storeClass: $this->storeClass,
             devtools: $this->devtools,
+            registry: $registry,
         );
     }
 

@@ -7,6 +7,7 @@ namespace Phalanx\Theatron\Tests\Unit\Component;
 use Phalanx\Theatron\Component\SignalScanner;
 use Phalanx\Theatron\Reactive\DirtyBatch;
 use Phalanx\Theatron\Reactive\Signal;
+use Phalanx\Theatron\Reactive\SignalRegistry;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -147,5 +148,40 @@ final class SignalScannerTest extends TestCase
 
         self::assertCount(0, $result->ownedSignals);
         self::assertCount(0, $result->subscriptions);
+    }
+
+    #[Test]
+    public function registersSignalsInRegistryWhenProvided(): void
+    {
+        $registry = new SignalRegistry();
+
+        $component = new class () {
+            public function __construct(
+                private(set) Signal $inputText = new Signal(''),
+            ) {
+            }
+        };
+
+        SignalScanner::scan($component, new DirtyBatch(), registry: $registry);
+
+        $snapshot = $registry->snapshot();
+        self::assertCount(1, $snapshot);
+
+        self::assertStringEndsWith('::inputText', $snapshot[0]->label);
+    }
+
+    #[Test]
+    public function skipsRegistrationWhenNoRegistry(): void
+    {
+        $component = new class () {
+            public function __construct(
+                private(set) Signal $count = new Signal(0),
+            ) {
+            }
+        };
+
+        $result = SignalScanner::scan($component, new DirtyBatch());
+
+        self::assertCount(1, $result->ownedSignals);
     }
 }

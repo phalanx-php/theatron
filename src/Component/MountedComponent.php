@@ -30,6 +30,14 @@ final class MountedComponent implements Renderable
         get => $this->dirty->isDirty;
     }
 
+    public int $signalCount {
+        get => count($this->ownedSignals);
+    }
+
+    public int $subscriptionCount {
+        get => count($this->subscriptions);
+    }
+
     private ?Renderable $lastResult = null;
     private ?RenderContext $renderCtx = null;
     private ?Stylesheet $cachedStylesheet = null;

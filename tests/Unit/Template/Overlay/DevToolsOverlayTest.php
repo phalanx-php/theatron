@@ -7,7 +7,10 @@ namespace Phalanx\Theatron\Tests\Unit\Template\Overlay;
 use Phalanx\Scope\TaskScope;
 use Phalanx\Theatron\Component\MountSystem;
 use Phalanx\Theatron\Context\RenderContext;
+use Phalanx\Theatron\Contract\Component;
 use Phalanx\Theatron\Layout\Border;
+use Phalanx\Theatron\Reactive\Signal;
+use Phalanx\Theatron\Reactive\SignalRegistry;
 use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Element\ColumnElement;
 use Phalanx\Theatron\Tdom\Element\PanelElement;
@@ -31,8 +34,8 @@ final class DevToolsOverlayTest extends TestCase
     #[Test]
     public function rendersColumnWithTabBarAndBody(): void
     {
-        $overlay = new DevToolsOverlay(new AppStore());
-        $root    = $this->assertColumn($overlay($this->makeContext()));
+        [$overlay] = $this->makeOverlay();
+        $root      = $this->assertColumn($overlay($this->makeContext()));
 
         self::assertCount(2, $root->children);
         self::assertInstanceOf(TextElement::class, $root->children[0]);
@@ -48,7 +51,7 @@ final class DevToolsOverlayTest extends TestCase
     #[Test]
     public function defaultTabIsMetrics(): void
     {
-        $overlay = new DevToolsOverlay(new AppStore());
+        [$overlay] = $this->makeOverlay();
 
         self::assertSame(DevToolsTab::Metrics->value, $overlay->activeTab->value);
     }
@@ -56,14 +59,29 @@ final class DevToolsOverlayTest extends TestCase
     #[Test]
     public function renderMetricsTabShowsMemory(): void
     {
-        $overlay = new DevToolsOverlay(new AppStore());
-        $root    = $this->assertColumn($overlay($this->makeContext()));
+        [$overlay, $mountSystem] = $this->makeOverlay();
+        $root                   = $this->assertColumn($overlay($this->makeContext($mountSystem)));
 
         $body = $this->assertPanel($root->children[1]);
         $flat = $this->flattenLines($body->child);
 
-        self::assertStringContainsString('mem:', $flat);
-        self::assertStringContainsString('peak:', $flat);
+        self::assertStringContainsString('mem/r:', $flat);
+        self::assertStringContainsString('mem/z:', $flat);
+        self::assertStringContainsString('peak/r:', $flat);
+        self::assertStringContainsString('peak/z:', $flat);
+    }
+
+    #[Test]
+    public function renderMetricsTabShowsIntrospectionCounts(): void
+    {
+        [$overlay, $mountSystem] = $this->makeOverlay();
+        $root                   = $this->assertColumn($overlay($this->makeContext($mountSystem)));
+
+        $body = $this->assertPanel($root->children[1]);
+        $flat = $this->flattenLines($body->child);
+
+        self::assertStringContainsString('comps:', $flat);
+        self::assertStringContainsString('sigs:', $flat);
     }
 
     #[Test]
@@ -76,10 +94,10 @@ final class DevToolsOverlayTest extends TestCase
         $store->agents = new AgentRegistrySlice()
             ->register(new AgentSummary(id: 'agent_leonidas', name: 'Leonidas', capabilities: ['tactics']));
 
-        $overlay = new DevToolsOverlay($store);
+        [$overlay, $mountSystem] = $this->makeOverlay($store);
         $overlay->activeTab->value = DevToolsTab::Store->value;
 
-        $root = $this->assertColumn($overlay($this->makeContext()));
+        $root = $this->assertColumn($overlay($this->makeContext($mountSystem)));
         $body = $this->assertPanel($root->children[1]);
         $flat = $this->flattenLines($body->child);
 
@@ -99,10 +117,10 @@ final class DevToolsOverlayTest extends TestCase
             ->appendToken('Three hundred stand firm.');
         $store->activity = new ActivitySlice()->updateUsage(100, 200);
 
-        $overlay = new DevToolsOverlay($store);
-        $root    = $this->assertColumn($overlay($this->makeContext()));
-        $body    = $this->assertPanel($root->children[1]);
-        $flat    = $this->flattenLines($body->child);
+        [$overlay, $mountSystem] = $this->makeOverlay($store);
+        $root = $this->assertColumn($overlay($this->makeContext($mountSystem)));
+        $body = $this->assertPanel($root->children[1]);
+        $flat = $this->flattenLines($body->child);
 
         self::assertStringContainsString('msgs:', $flat);
         self::assertStringContainsString('in:', $flat);
@@ -113,8 +131,8 @@ final class DevToolsOverlayTest extends TestCase
     #[Test]
     public function tabBarContainsAllTabLabels(): void
     {
-        $overlay = new DevToolsOverlay(new AppStore());
-        $root    = $this->assertColumn($overlay($this->makeContext()));
+        [$overlay, $mountSystem] = $this->makeOverlay();
+        $root                   = $this->assertColumn($overlay($this->makeContext($mountSystem)));
 
         $tabBar = $root->children[0];
         self::assertInstanceOf(TextElement::class, $tabBar);
@@ -122,29 +140,110 @@ final class DevToolsOverlayTest extends TestCase
 
         $flat = $this->flattenLine($tabBar->content);
         self::assertStringContainsString('Metrics', $flat);
+        self::assertStringContainsString('Signals', $flat);
+        self::assertStringContainsString('Tree', $flat);
         self::assertStringContainsString('Store', $flat);
-        self::assertStringContainsString('Info', $flat);
     }
 
     #[Test]
-    public function infoTabRendersPlaceholderContent(): void
+    public function renderSignalsTabShowsEmptyStateWhenRegistryDisabled(): void
     {
-        $overlay = new DevToolsOverlay(new AppStore());
-        $overlay->activeTab->value = DevToolsTab::Info->value;
+        [$overlay, $mountSystem] = $this->makeOverlay();
+        $overlay->activeTab->value = DevToolsTab::Signals->value;
 
-        $root = $this->assertColumn($overlay($this->makeContext()));
+        $root = $this->assertColumn($overlay($this->makeContext($mountSystem)));
         $body = $this->assertPanel($root->children[1]);
         $flat = $this->flattenLines($body->child);
 
-        self::assertStringContainsString('phalanx-theatron', $flat);
-        self::assertStringContainsString('Metrics', $flat);
-        self::assertStringContainsString('Store', $flat);
+        self::assertStringContainsString('No signals registered', $flat);
     }
 
-    private function makeContext(): RenderContext
+    #[Test]
+    public function renderSignalsTabShowsRegisteredSignals(): void
+    {
+        $registry = new SignalRegistry();
+
+        $signal = new Signal(42);
+        $registry->register($signal, 'apollo.count');
+
+        [$overlay, $mountSystem] = $this->makeOverlay(registry: $registry);
+        $overlay->activeTab->value = DevToolsTab::Signals->value;
+
+        $root = $this->assertColumn($overlay($this->makeContext($mountSystem)));
+        $body = $this->assertPanel($root->children[1]);
+        $flat = $this->flattenLines($body->child);
+
+        self::assertStringContainsString('apollo.count', $flat);
+    }
+
+    #[Test]
+    public function renderSignalsTabShowsDisposedSignalLabel(): void
+    {
+        $registry = new SignalRegistry();
+
+        $signal = new Signal(0);
+        $registry->register($signal, 'poseidon.depth');
+        $signal->dispose();
+
+        [$overlay, $mountSystem] = $this->makeOverlay(registry: $registry);
+        $overlay->activeTab->value = DevToolsTab::Signals->value;
+
+        $root = $this->assertColumn($overlay($this->makeContext($mountSystem)));
+        $body = $this->assertPanel($root->children[1]);
+        $flat = $this->flattenLines($body->child);
+
+        self::assertStringContainsString('poseidon.depth', $flat);
+    }
+
+    #[Test]
+    public function renderTreeTabShowsEmptyStateWhenNoComponents(): void
+    {
+        [$overlay, $mountSystem] = $this->makeOverlay();
+        $overlay->activeTab->value = DevToolsTab::Tree->value;
+
+        $root = $this->assertColumn($overlay($this->makeContext($mountSystem)));
+        $body = $this->assertPanel($root->children[1]);
+        $flat = $this->flattenLines($body->child);
+
+        self::assertStringContainsString('No components mounted', $flat);
+    }
+
+    #[Test]
+    public function renderTreeTabShowsMountedComponents(): void
     {
         $scope       = $this->createStub(TaskScope::class);
         $mountSystem = new MountSystem($scope);
+        $mountSystem->mount(OverlayTreeFixtureComponent::class);
+
+        [$overlay] = $this->makeOverlay(mountSystem: $mountSystem);
+        $overlay->activeTab->value = DevToolsTab::Tree->value;
+
+        $root = $this->assertColumn($overlay($this->makeContext($mountSystem)));
+        $body = $this->assertPanel($root->children[1]);
+        $flat = $this->flattenLines($body->child);
+
+        self::assertStringContainsString('OverlayTreeFixtureComponent', $flat);
+    }
+
+    /**
+     * @return array{DevToolsOverlay, MountSystem}
+     */
+    private function makeOverlay(
+        ?AppStore $store = null,
+        ?MountSystem $mountSystem = null,
+        ?SignalRegistry $registry = null,
+    ): array {
+        $store       ??= new AppStore();
+        $mountSystem ??= new MountSystem($this->createStub(TaskScope::class));
+        $registry    ??= new SignalRegistry();
+
+        return [new DevToolsOverlay($store, $mountSystem, $registry), $mountSystem];
+    }
+
+    private function makeContext(?MountSystem $mountSystem = null): RenderContext
+    {
+        $scope       = $this->createStub(TaskScope::class);
+        $mountSystem ??= new MountSystem($scope);
 
         return new RenderContext($scope, new Ui(), Theme::default(), $mountSystem);
     }
@@ -192,5 +291,13 @@ final class DevToolsOverlayTest extends TestCase
             static fn ($span) => $span->content,
             $line->spans,
         ));
+    }
+}
+
+final class OverlayTreeFixtureComponent implements Component
+{
+    public function __invoke(RenderContext $ctx): Renderable
+    {
+        return $ctx->ui->text('');
     }
 }

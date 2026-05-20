@@ -21,6 +21,7 @@ use Phalanx\Theatron\Input\KeyEvent;
 use Phalanx\Theatron\Input\ModeDispatcher;
 use Phalanx\Theatron\Kit\ScreenLayout;
 use Phalanx\Theatron\Navigation\WorkspaceNavigator;
+use Phalanx\Theatron\Reactive\SignalRegistry;
 use Phalanx\Theatron\Stage\Stage;
 use Phalanx\Theatron\State\Store;
 use Phalanx\Theatron\Styling\Theme;
@@ -42,6 +43,7 @@ final class TheatronApp
         private(set) array $globalBindings,
         private(set) ?string $storeClass,
         private(set) bool $devtools,
+        private(set) ?SignalRegistry $registry = null,
     ) {
     }
 
@@ -50,7 +52,12 @@ final class TheatronApp
         $registry = new BindingRegistry();
         $registry->setGlobal($this->globalBindings);
 
-        $mountSystem = new MountSystem($scope);
+        $mountSystem = new MountSystem($scope, registry: $this->registry);
+        $mountSystem->provide(MountSystem::class, $mountSystem);
+
+        if ($this->registry !== null) {
+            $mountSystem->provide(SignalRegistry::class, $this->registry);
+        }
 
         if ($this->storeClass !== null) {
             $store = new ($this->storeClass)();

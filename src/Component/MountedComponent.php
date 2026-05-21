@@ -10,6 +10,7 @@ use Phalanx\Theatron\Contract\Disposable as TheatronDisposable;
 use Phalanx\Theatron\Contract\Mountable;
 use Phalanx\Theatron\Contract\Styled;
 use Phalanx\Theatron\Reactive\DirtyBatch;
+use Phalanx\Theatron\Reactive\RenderDependencySet;
 use Phalanx\Theatron\Reactive\ResourceSubscription;
 use Phalanx\Theatron\Reactive\Signal;
 use Phalanx\Theatron\Reactive\SignalSubscription;
@@ -36,7 +37,7 @@ final class MountedComponent implements Renderable
     }
 
     public int $subscriptionCount {
-        get => count($this->subscriptions);
+        get => count($this->subscriptions) + $this->renderDependencies->count;
     }
 
     private ?Renderable $lastResult = null;
@@ -53,11 +54,14 @@ final class MountedComponent implements Renderable
     /** @var list<StoreSubscription> */
     private array $storeSubscriptions;
 
+    private RenderDependencySet $renderDependencies;
+
     public function __construct(
         private(set) Component $component,
         private(set) DirtyBatch $dirty,
         SignalScanResult $scanResult,
     ) {
+        $this->renderDependencies = new RenderDependencySet($this->dirty);
         $this->ownedSignals = $scanResult->ownedSignals;
         $this->subscriptions = $scanResult->subscriptions;
         $this->storeSubscriptions = $scanResult->storeSubscriptions;
@@ -79,12 +83,18 @@ final class MountedComponent implements Renderable
         }
 
         $frame = Tracker::push();
+        $popped = false;
         try {
             $result = ($this->component)($ctx);
+            $deps = Tracker::pop($frame);
+            $popped = true;
         } finally {
-            Tracker::pop($frame);
+            if (!$popped) {
+                Tracker::pop($frame);
+            }
         }
 
+        $this->renderDependencies->reconcile($deps);
         $this->lastResult = $result;
 
         return $result;
@@ -129,6 +139,8 @@ final class MountedComponent implements Renderable
             $sub->dispose();
         }
         $this->storeSubscriptions = [];
+
+        $this->renderDependencies->dispose();
 
         foreach ($this->ownedSignals as $signal) {
             $signal->dispose();

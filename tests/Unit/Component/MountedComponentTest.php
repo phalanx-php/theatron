@@ -10,7 +10,9 @@ use Phalanx\Theatron\Component\SignalScanner;
 use Phalanx\Theatron\Context\RenderContext;
 use Phalanx\Theatron\Contract\Component;
 use Phalanx\Theatron\Contract\Disposable as TheatronDisposable;
+use Phalanx\Theatron\Reactive\Computed;
 use Phalanx\Theatron\Reactive\DirtyBatch;
+use Phalanx\Theatron\Reactive\Resource;
 use Phalanx\Theatron\Reactive\Signal;
 use Phalanx\Theatron\Reactive\Tracker;
 use Phalanx\Theatron\Styling\Theme;
@@ -149,6 +151,177 @@ final class MountedComponentTest extends TestCase
         $component->count->set(42);
 
         self::assertTrue($mounted->isDirty);
+    }
+
+    #[Test]
+    public function renderTimeConditionalDependenciesAreReconciled(): void
+    {
+        $model = new \stdClass();
+        $model->useA = new Signal(true);
+        $model->a = new Signal('a');
+        $model->b = new Signal('b');
+
+        $component = new class ($model) implements Component {
+            public function __construct(private \stdClass $model)
+            {
+            }
+
+            public function __invoke(RenderContext $ctx): Renderable
+            {
+                $value = $this->model->useA->get()
+                    ? $this->model->a->get()
+                    : $this->model->b->get();
+
+                return $ctx->ui->text((string) $value);
+            }
+        };
+
+        $mounted = $this->createMounted($component);
+        $ctx = $this->createRenderCtx();
+
+        $mounted->render($ctx);
+        self::assertFalse($mounted->isDirty);
+        self::assertSame(2, $mounted->subscriptionCount);
+
+        $model->useA->set(false);
+        self::assertTrue($mounted->isDirty);
+
+        $mounted->render($ctx);
+        self::assertFalse($mounted->isDirty);
+        self::assertSame(2, $mounted->subscriptionCount);
+
+        $model->a->set('old branch');
+        self::assertFalse($mounted->isDirty, 'Old render dependency must be unsubscribed');
+
+        $model->b->set('new branch');
+        self::assertTrue($mounted->isDirty, 'Current render dependency must stay subscribed');
+    }
+
+    #[Test]
+    public function renderTimeResourceDependencyMarksDirty(): void
+    {
+        $model = new \stdClass();
+        $model->reply = new Resource(static fn(): iterable => ['streamed']);
+
+        $component = new class ($model) implements Component {
+            public function __construct(private \stdClass $model)
+            {
+            }
+
+            public function __invoke(RenderContext $ctx): Renderable
+            {
+                return $ctx->ui->text($this->model->reply->buffer);
+            }
+        };
+
+        $mounted = $this->createMounted($component);
+        $mounted->render($this->createRenderCtx());
+        self::assertFalse($mounted->isDirty);
+
+        $model->reply->stream();
+
+        self::assertTrue($mounted->isDirty);
+    }
+
+    #[Test]
+    public function renderTimeComputedDependencyMarksDirty(): void
+    {
+        $model = new \stdClass();
+        $model->source = new Signal('first');
+        $model->label = new Computed(static fn(): string => strtoupper((string) $model->source->get()));
+
+        $component = new class ($model) implements Component {
+            public function __construct(private \stdClass $model)
+            {
+            }
+
+            public function __invoke(RenderContext $ctx): Renderable
+            {
+                return $ctx->ui->text((string) $this->model->label->value);
+            }
+        };
+
+        $mounted = $this->createMounted($component);
+        $mounted->render($this->createRenderCtx());
+        self::assertFalse($mounted->isDirty);
+
+        $model->source->set('second');
+
+        self::assertTrue($mounted->isDirty);
+    }
+
+    #[Test]
+    public function disposeCleansRenderTimeDependencies(): void
+    {
+        $model = new \stdClass();
+        $model->signal = new Signal('active');
+
+        $component = new class ($model) implements Component {
+            public function __construct(private \stdClass $model)
+            {
+            }
+
+            public function __invoke(RenderContext $ctx): Renderable
+            {
+                return $ctx->ui->text((string) $this->model->signal->get());
+            }
+        };
+
+        $mounted = $this->createMounted($component);
+        $mounted->render($this->createRenderCtx());
+        self::assertSame(1, $mounted->subscriptionCount);
+
+        $mounted->dispose();
+        $model->signal->set('after dispose');
+
+        self::assertFalse($mounted->isDirty);
+        self::assertSame(0, $mounted->subscriptionCount);
+    }
+
+    #[Test]
+    public function failedRenderPreservesPreviousRenderDependencies(): void
+    {
+        $model = new \stdClass();
+        $model->throw = false;
+        $model->good = new Signal('good');
+        $model->bad = new Signal('bad');
+
+        $component = new class ($model) implements Component {
+            public function __construct(private \stdClass $model)
+            {
+            }
+
+            public function __invoke(RenderContext $ctx): Renderable
+            {
+                if ($this->model->throw) {
+                    $this->model->bad->get();
+
+                    throw new \RuntimeException('render failed');
+                }
+
+                return $ctx->ui->text((string) $this->model->good->get());
+            }
+        };
+
+        $mounted = $this->createMounted($component);
+        $ctx = $this->createRenderCtx();
+        $mounted->render($ctx);
+        self::assertFalse($mounted->isDirty);
+
+        $model->throw = true;
+
+        try {
+            $mounted->render($ctx);
+            self::fail('Expected failed render.');
+        } catch (\RuntimeException $e) {
+            self::assertSame('render failed', $e->getMessage());
+        }
+
+        $model->bad->set('bad changed');
+        self::assertFalse($mounted->isDirty, 'Failed render deps must not replace previous deps');
+
+        $model->good->set('good changed');
+        self::assertTrue($mounted->isDirty, 'Previous successful render deps must remain active');
     }
 
     #[Test]

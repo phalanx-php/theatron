@@ -9,6 +9,7 @@ use Phalanx\Theatron\Contract\Disposable as TheatronDisposable;
 use Phalanx\Theatron\Contract\Mountable;
 use Phalanx\Theatron\Contract\Screen;
 use Phalanx\Theatron\Reactive\DirtyBatch;
+use Phalanx\Theatron\Reactive\RenderDependencySet;
 use Phalanx\Theatron\Reactive\ResourceSubscription;
 use Phalanx\Theatron\Reactive\Signal;
 use Phalanx\Theatron\Reactive\SignalSubscription;
@@ -43,11 +44,14 @@ final class MountedScreen
     /** @var list<StoreSubscription> */
     private array $storeSubscriptions;
 
+    private RenderDependencySet $renderDependencies;
+
     public function __construct(
         private(set) Screen $screen,
         private(set) DirtyBatch $dirty,
         SignalScanResult $scanResult,
     ) {
+        $this->renderDependencies = new RenderDependencySet($this->dirty);
         $this->ownedSignals = $scanResult->ownedSignals;
         $this->subscriptions = $scanResult->subscriptions;
         $this->storeSubscriptions = $scanResult->storeSubscriptions;
@@ -64,12 +68,18 @@ final class MountedScreen
         $this->dirty->consume();
 
         $frame = Tracker::push();
+        $popped = false;
         try {
             $result = ($this->screen)($ctx);
+            $deps = Tracker::pop($frame);
+            $popped = true;
         } finally {
-            Tracker::pop($frame);
+            if (!$popped) {
+                Tracker::pop($frame);
+            }
         }
 
+        $this->renderDependencies->reconcile($deps);
         $this->lastResult = $result;
 
         return $result;
@@ -109,6 +119,8 @@ final class MountedScreen
             $sub->dispose();
         }
         $this->storeSubscriptions = [];
+
+        $this->renderDependencies->dispose();
 
         foreach ($this->ownedSignals as $signal) {
             $signal->dispose();

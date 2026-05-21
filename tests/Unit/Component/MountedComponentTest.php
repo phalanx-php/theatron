@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Phalanx\Theatron\Tests\Unit\Component;
 
 use Phalanx\Cancellation\Cancelled;
+use Phalanx\Scope\TaskScope;
 use Phalanx\Theatron\Component\MountedComponent;
 use Phalanx\Theatron\Component\MountSystem;
 use Phalanx\Theatron\Component\SignalScanner;
 use Phalanx\Theatron\Context\RenderContext;
 use Phalanx\Theatron\Contract\Component;
 use Phalanx\Theatron\Contract\Disposable as TheatronDisposable;
+use Phalanx\Theatron\Contract\Mountable;
 use Phalanx\Theatron\Reactive\Computed;
 use Phalanx\Theatron\Reactive\DirtyBatch;
 use Phalanx\Theatron\Reactive\Resource;
@@ -21,6 +23,7 @@ use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Element\TextElement;
 use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Tdom\Ui;
+use Phalanx\Theatron\Tests\Support\ClockProbe;
 use Phalanx\Theatron\Tests\Support\RecordingTaskScope;
 use Phalanx\Trace\TraceType;
 use PHPUnit\Framework\Attributes\Test;
@@ -771,50 +774,40 @@ final class MountedComponentTest extends TestCase
     }
 
     #[Test]
-    public function slowRenderEmitsTraceDiagnosticAndUsesTaskScopeWaitReason(): void
+    public function slowRenderEmitsTraceDiagnosticWithoutInventingTaskWait(): void
     {
-        $times = [1.0, 1.075];
+        $clock = new ClockProbe(1.0, 1.075);
         $scope = new RecordingTaskScope();
-        $diagnostics = RenderDiagnostics::supervised(
+        $diagnostics = RenderDiagnostics::enabled(
             slowThresholdSeconds: 0.05,
-            clock: static function () use (&$times): float {
-                return array_shift($times) ?? 1.075;
-            },
+            clock: $clock(...),
         );
 
-        $mounted = $this->createMounted(new class () implements Component {
-            public function __invoke(RenderContext $ctx): Renderable
-            {
-                return $ctx->ui->text('slow');
-            }
-        });
+        $mounted = $this->createMounted(new RenderDiagnosticSlowComponent());
 
         $mounted->render($this->createObservedRenderCtx($scope, $diagnostics));
 
         $events = $scope->trace()->events();
-        $waitReason = $scope->lastWaitReason();
 
-        self::assertSame(1, $scope->callCount());
-        self::assertNotNull($waitReason);
-        self::assertSame('custom', $waitReason->kind->value);
-        self::assertStringStartsWith('theatron.render component', $waitReason->detail);
+        self::assertSame(0, $scope->callCount());
+        self::assertNull($scope->lastWaitReason());
         self::assertCount(1, $events);
         self::assertSame(TraceType::Lifecycle, $events[0]->type);
         self::assertSame('theatron.render.slow', $events[0]->name);
         self::assertSame('component', $events[0]->attrs['kind']);
+        self::assertSame(RenderDiagnosticSlowComponent::class, $events[0]->attrs['target']);
         self::assertEqualsWithDelta(75.0, $events[0]->attrs['elapsed_ms'], 0.001);
+        self::assertTrue($clock->isExhausted());
     }
 
     #[Test]
     public function failedRenderEmitsTraceDiagnosticAndLeavesComponentDirty(): void
     {
-        $times = [2.0, 2.002];
+        $clock = new ClockProbe(2.0, 2.002);
         $scope = new RecordingTaskScope();
-        $diagnostics = RenderDiagnostics::supervised(
+        $diagnostics = RenderDiagnostics::enabled(
             slowThresholdSeconds: 1.0,
-            clock: static function () use (&$times): float {
-                return array_shift($times) ?? 2.002;
-            },
+            clock: $clock(...),
         );
 
         $component = new class () implements Component {
@@ -834,25 +827,24 @@ final class MountedComponentTest extends TestCase
 
         $events = $scope->trace()->events();
         self::assertTrue($mounted->isDirty);
-        self::assertSame(1, $scope->callCount());
+        self::assertSame(0, $scope->callCount());
         self::assertCount(1, $events);
         self::assertSame(TraceType::Failed, $events[0]->type);
         self::assertSame('theatron.render.failed', $events[0]->name);
         self::assertSame('component', $events[0]->attrs['kind']);
         self::assertSame(\RuntimeException::class, $events[0]->attrs['error']);
         self::assertSame('component failed', $events[0]->attrs['message']);
+        self::assertTrue($clock->isExhausted());
     }
 
     #[Test]
     public function mountResolutionFailureEmitsTraceDiagnostic(): void
     {
-        $times = [2.0, 2.003];
+        $clock = new ClockProbe(2.0, 2.003);
         $scope = new RecordingTaskScope();
-        $diagnostics = RenderDiagnostics::supervised(
+        $diagnostics = RenderDiagnostics::enabled(
             slowThresholdSeconds: 1.0,
-            clock: static function () use (&$times): float {
-                return array_shift($times) ?? 2.003;
-            },
+            clock: $clock(...),
         );
 
         $component = new class () implements Component {
@@ -872,24 +864,60 @@ final class MountedComponentTest extends TestCase
 
         $events = $scope->trace()->events();
         self::assertTrue($mounted->isDirty);
-        self::assertSame(1, $scope->callCount());
+        self::assertSame(0, $scope->callCount());
         self::assertCount(1, $events);
         self::assertSame(TraceType::Failed, $events[0]->type);
         self::assertSame('theatron.render.failed', $events[0]->name);
         self::assertSame('component', $events[0]->attrs['kind']);
         self::assertSame(\RuntimeException::class, $events[0]->attrs['error']);
+        self::assertTrue($clock->isExhausted());
+    }
+
+    #[Test]
+    public function mountCommitFailureEmitsTraceDiagnosticAndLeavesComponentDirty(): void
+    {
+        $clock = new ClockProbe(2.0, 2.004);
+        $scope = new RecordingTaskScope();
+        $diagnostics = RenderDiagnostics::enabled(
+            slowThresholdSeconds: 1.0,
+            clock: $clock(...),
+        );
+
+        $component = new class () implements Component {
+            public function __invoke(RenderContext $ctx): Renderable
+            {
+                return mount(RenderDiagnosticFailingMountLifecycleChildComponent::class);
+            }
+        };
+        $mounted = $this->createMounted($component);
+
+        try {
+            $mounted->render($this->createObservedRenderCtx($scope, $diagnostics));
+            self::fail('Expected mount commit failure.');
+        } catch (\RuntimeException $e) {
+            self::assertSame('child onMount failed', $e->getMessage());
+        }
+
+        $events = $scope->trace()->events();
+        self::assertTrue($mounted->isDirty);
+        self::assertSame(0, $scope->callCount());
+        self::assertCount(1, $events);
+        self::assertSame(TraceType::Failed, $events[0]->type);
+        self::assertSame('theatron.render.failed', $events[0]->name);
+        self::assertSame('component', $events[0]->attrs['kind']);
+        self::assertSame(\RuntimeException::class, $events[0]->attrs['error']);
+        self::assertSame('child onMount failed', $events[0]->attrs['message']);
+        self::assertTrue($clock->isExhausted());
     }
 
     #[Test]
     public function cancelledRenderEmitsTraceDiagnosticAndRethrowsCancellation(): void
     {
-        $times = [3.0, 3.001];
+        $clock = new ClockProbe(3.0, 3.001);
         $scope = new RecordingTaskScope();
-        $diagnostics = RenderDiagnostics::supervised(
+        $diagnostics = RenderDiagnostics::enabled(
             slowThresholdSeconds: 1.0,
-            clock: static function () use (&$times): float {
-                return array_shift($times) ?? 3.001;
-            },
+            clock: $clock(...),
         );
 
         $mounted = $this->createMounted(new class () implements Component {
@@ -907,12 +935,13 @@ final class MountedComponentTest extends TestCase
 
         $events = $scope->trace()->events();
         self::assertTrue($mounted->isDirty);
-        self::assertSame(1, $scope->callCount());
+        self::assertSame(0, $scope->callCount());
         self::assertCount(1, $events);
-        self::assertSame(TraceType::Failed, $events[0]->type);
+        self::assertSame(TraceType::Lifecycle, $events[0]->type);
         self::assertSame('theatron.render.cancelled', $events[0]->name);
         self::assertSame('component', $events[0]->attrs['kind']);
         self::assertArrayNotHasKey('error', $events[0]->attrs);
+        self::assertTrue($clock->isExhausted());
     }
 
     private function createMounted(Component $component): MountedComponent
@@ -959,5 +988,30 @@ final class RenderDiagnosticFailingChildComponent implements Component
     public function __invoke(RenderContext $ctx): Renderable
     {
         return $ctx->ui->text('unreachable');
+    }
+}
+
+final class RenderDiagnosticFailingMountLifecycleChildComponent implements Component, Mountable
+{
+    public function __invoke(RenderContext $ctx): Renderable
+    {
+        return $ctx->ui->text('child');
+    }
+
+    public function onMount(TaskScope $scope): void
+    {
+        throw new \RuntimeException('child onMount failed');
+    }
+
+    public function onUnmount(): void
+    {
+    }
+}
+
+final class RenderDiagnosticSlowComponent implements Component
+{
+    public function __invoke(RenderContext $ctx): Renderable
+    {
+        return $ctx->ui->text('slow');
     }
 }

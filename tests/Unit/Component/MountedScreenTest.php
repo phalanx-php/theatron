@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Phalanx\Theatron\Tests\Unit\Component;
 
+use Phalanx\Cancellation\Cancelled;
 use Phalanx\Scope\TaskScope;
 use Phalanx\Theatron\Component\MountedScreen;
 use Phalanx\Theatron\Component\MountSystem;
@@ -19,6 +20,7 @@ use Phalanx\Theatron\Rendering\RenderDiagnostics;
 use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Tdom\Ui;
+use Phalanx\Theatron\Tests\Support\ClockProbe;
 use Phalanx\Theatron\Tests\Support\RecordingTaskScope;
 use Phalanx\Trace\TraceType;
 use PHPUnit\Framework\Attributes\Test;
@@ -223,50 +225,40 @@ final class MountedScreenTest extends TestCase
     }
 
     #[Test]
-    public function slowScreenRenderEmitsTraceDiagnosticAndUsesTaskScopeWaitReason(): void
+    public function slowScreenRenderEmitsTraceDiagnosticWithoutInventingTaskWait(): void
     {
-        $times = [1.0, 1.08];
+        $clock = new ClockProbe(1.0, 1.08);
         $scope = new RecordingTaskScope();
-        $diagnostics = RenderDiagnostics::supervised(
+        $diagnostics = RenderDiagnostics::enabled(
             slowThresholdSeconds: 0.05,
-            clock: static function () use (&$times): float {
-                return array_shift($times) ?? 1.08;
-            },
+            clock: $clock(...),
         );
 
-        $mounted = $this->createMounted(new class () implements Screen {
-            public function __invoke(ScreenContext $ctx): Renderable
-            {
-                return $ctx->ui->text('slow');
-            }
-        });
+        $mounted = $this->createMounted(new RenderDiagnosticSlowScreen());
 
         $mounted->render($this->createObservedScreenCtx($scope, $diagnostics));
 
         $events = $scope->trace()->events();
-        $waitReason = $scope->lastWaitReason();
 
-        self::assertSame(1, $scope->callCount());
-        self::assertNotNull($waitReason);
-        self::assertSame('custom', $waitReason->kind->value);
-        self::assertStringStartsWith('theatron.render screen', $waitReason->detail);
+        self::assertSame(0, $scope->callCount());
+        self::assertNull($scope->lastWaitReason());
         self::assertCount(1, $events);
         self::assertSame(TraceType::Lifecycle, $events[0]->type);
         self::assertSame('theatron.render.slow', $events[0]->name);
         self::assertSame('screen', $events[0]->attrs['kind']);
+        self::assertSame(RenderDiagnosticSlowScreen::class, $events[0]->attrs['target']);
         self::assertEqualsWithDelta(80.0, $events[0]->attrs['elapsed_ms'], 0.001);
+        self::assertTrue($clock->isExhausted());
     }
 
     #[Test]
     public function failedScreenRenderEmitsTraceDiagnosticAndLeavesScreenDirty(): void
     {
-        $times = [2.0, 2.004];
+        $clock = new ClockProbe(2.0, 2.004);
         $scope = new RecordingTaskScope();
-        $diagnostics = RenderDiagnostics::supervised(
+        $diagnostics = RenderDiagnostics::enabled(
             slowThresholdSeconds: 1.0,
-            clock: static function () use (&$times): float {
-                return array_shift($times) ?? 2.004;
-            },
+            clock: $clock(...),
         );
 
         $mounted = $this->createMounted(new class () implements Screen {
@@ -285,13 +277,48 @@ final class MountedScreenTest extends TestCase
 
         $events = $scope->trace()->events();
         self::assertTrue($mounted->isDirty);
-        self::assertSame(1, $scope->callCount());
+        self::assertSame(0, $scope->callCount());
         self::assertCount(1, $events);
         self::assertSame(TraceType::Failed, $events[0]->type);
         self::assertSame('theatron.render.failed', $events[0]->name);
         self::assertSame('screen', $events[0]->attrs['kind']);
         self::assertSame(\RuntimeException::class, $events[0]->attrs['error']);
         self::assertSame('screen failed', $events[0]->attrs['message']);
+        self::assertTrue($clock->isExhausted());
+    }
+
+    #[Test]
+    public function cancelledScreenRenderEmitsTraceDiagnosticAndRethrowsCancellation(): void
+    {
+        $clock = new ClockProbe(3.0, 3.001);
+        $scope = new RecordingTaskScope();
+        $diagnostics = RenderDiagnostics::enabled(
+            slowThresholdSeconds: 1.0,
+            clock: $clock(...),
+        );
+
+        $mounted = $this->createMounted(new class () implements Screen {
+            public function __invoke(ScreenContext $ctx): Renderable
+            {
+                throw new Cancelled();
+            }
+        });
+
+        try {
+            $mounted->render($this->createObservedScreenCtx($scope, $diagnostics));
+            self::fail('Expected cancelled screen render.');
+        } catch (Cancelled) {
+        }
+
+        $events = $scope->trace()->events();
+        self::assertTrue($mounted->isDirty);
+        self::assertSame(0, $scope->callCount());
+        self::assertCount(1, $events);
+        self::assertSame(TraceType::Lifecycle, $events[0]->type);
+        self::assertSame('theatron.render.cancelled', $events[0]->name);
+        self::assertSame('screen', $events[0]->attrs['kind']);
+        self::assertArrayNotHasKey('error', $events[0]->attrs);
+        self::assertTrue($clock->isExhausted());
     }
 
     private function createMounted(Screen $screen): MountedScreen
@@ -327,5 +354,13 @@ final class MountedScreenTest extends TestCase
             new MountSystem($scope),
             $diagnostics,
         );
+    }
+}
+
+final class RenderDiagnosticSlowScreen implements Screen
+{
+    public function __invoke(ScreenContext $ctx): Renderable
+    {
+        return $ctx->ui->text('slow');
     }
 }

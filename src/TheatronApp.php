@@ -77,7 +77,7 @@ final class TheatronApp
         $registry->activateScreen($this->screens[0]);
 
         $ui = new Ui($this->theme);
-        $renderDiagnostics = RenderDiagnostics::supervised();
+        $renderDiagnostics = RenderDiagnostics::enabled();
         $screenCtx = new ScreenContext($scope, $ui, $this->theme, $navigator, $mountSystem, $renderDiagnostics);
         $renderCtx = new RenderContext($scope, $ui, $this->theme, $mountSystem, $registry, $renderDiagnostics);
         $statusMountOwner = new \stdClass();

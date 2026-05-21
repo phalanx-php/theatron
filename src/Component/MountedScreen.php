@@ -75,45 +75,43 @@ final class MountedScreen
         $this->dirty->consume();
 
         $screen = $this->screen;
-        $ctx->mountSystem->enterFrame($this);
-        $commitMountFrame = false;
+        $mounted = $this;
         try {
-            $frame = Tracker::push();
-            $popped = false;
-            try {
-                $result = $ctx->renderDiagnostics->screen(
-                    $ctx->scope,
-                    $screen,
-                    static fn(): Renderable => $ctx->mountSystem->resolve(
-                        $screen($ctx),
-                    ),
-                );
-                $deps = Tracker::pop($frame);
-                $popped = true;
-            } catch (Throwable $e) {
-                $this->dirty->request();
+            return $ctx->renderDiagnostics->screen(
+                $ctx->scope,
+                $screen,
+                static function () use ($ctx, $screen, $mounted): Renderable {
+                    $ctx->mountSystem->enterFrame($mounted);
+                    $commitMountFrame = false;
+                    try {
+                        $frame = Tracker::push();
+                        $popped = false;
+                        try {
+                            $result = $ctx->mountSystem->resolve(
+                                $screen($ctx),
+                            );
+                            $deps = Tracker::pop($frame);
+                            $popped = true;
+                        } finally {
+                            if (!$popped) {
+                                Tracker::pop($frame);
+                            }
+                        }
 
-                throw $e;
-            } finally {
-                if (!$popped) {
-                    Tracker::pop($frame);
-                }
-            }
+                        $mounted->renderDependencies->reconcile($deps);
+                        $mounted->lastResult = $result;
+                        $commitMountFrame = true;
 
-            try {
-                $this->renderDependencies->reconcile($deps);
-            } catch (Throwable $e) {
-                $this->dirty->request();
+                        return $result;
+                    } finally {
+                        $ctx->mountSystem->leaveFrame($mounted, $commitMountFrame);
+                    }
+                },
+            );
+        } catch (Throwable $e) {
+            $this->dirty->request();
 
-                throw $e;
-            }
-
-            $this->lastResult = $result;
-            $commitMountFrame = true;
-
-            return $result;
-        } finally {
-            $ctx->mountSystem->leaveFrame($this, $commitMountFrame);
+            throw $e;
         }
     }
 

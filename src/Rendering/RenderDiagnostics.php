@@ -6,9 +6,9 @@ namespace Phalanx\Theatron\Rendering;
 
 use Closure;
 use Phalanx\Cancellation\Cancelled;
+use Phalanx\Scope\ExecutionScope;
 use Phalanx\Scope\Scope;
-use Phalanx\Scope\TaskScope;
-use Phalanx\Supervisor\WaitReason;
+use Phalanx\Task\Task;
 use Phalanx\Trace\TraceType;
 use Throwable;
 
@@ -22,7 +22,6 @@ final class RenderDiagnostics
      */
     public function __construct(
         private bool $enabled = false,
-        private bool $supervised = false,
         private float $slowThresholdSeconds = 0.05,
         ?Closure $clock = null,
     ) {
@@ -32,13 +31,12 @@ final class RenderDiagnostics
     /**
      * @param (Closure(): float)|null $clock
      */
-    public static function supervised(
+    public static function enabled(
         float $slowThresholdSeconds = 0.05,
         ?Closure $clock = null,
     ): self {
         return new self(
             enabled: true,
-            supervised: true,
             slowThresholdSeconds: $slowThresholdSeconds,
             clock: $clock,
         );
@@ -88,7 +86,7 @@ final class RenderDiagnostics
             $result = $this->execute($scope, $kind, $target, $render);
         } catch (Cancelled $e) {
             $elapsed = ($this->clock)() - $startedAt;
-            $this->record($scope, TraceType::Failed, 'theatron.render.cancelled', $kind, $target, $elapsed);
+            $this->record($scope, TraceType::Lifecycle, 'theatron.render.cancelled', $kind, $target, $elapsed);
 
             throw $e;
         } catch (Throwable $e) {
@@ -113,13 +111,15 @@ final class RenderDiagnostics
      */
     private function execute(Scope $scope, string $kind, string $target, Closure $render): mixed
     {
-        if (!$this->supervised || !$scope instanceof TaskScope) {
+        if (!$scope instanceof ExecutionScope) {
             return $render();
         }
 
-        return $scope->call(
-            $render,
-            WaitReason::custom("theatron.render {$kind} {$target}"),
+        return $scope->execute(
+            Task::named(
+                "theatron.render.{$kind} {$target}",
+                static fn(ExecutionScope $_scope): mixed => $render(),
+            ),
         );
     }
 

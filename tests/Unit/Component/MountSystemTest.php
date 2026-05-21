@@ -278,6 +278,220 @@ final class MountSystemTest extends TestCase
         self::assertInstanceOf(TextElement::class, $result);
         self::assertSame('olympus', $result->content);
     }
+
+    #[Test]
+    public function renderSlotReusesMountedChildForStableFqcnAndProps(): void
+    {
+        $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
+        $model = new \stdClass();
+        $model->parentSignal = new Signal('parent');
+        $model->childSignal = new Signal('child');
+        $parent = $this->mountParent(new SlotParentComponent($model), $system);
+        $ctx = $this->renderContext($system);
+
+        $parent->render($ctx);
+        $first = $system->mounted()[0];
+        $first->render($ctx);
+
+        $model->parentSignal->set('parent changed');
+        $parent->render($ctx);
+
+        self::assertSame($first, $system->mounted()[0]);
+        self::assertCount(1, $system->mounted());
+        self::assertFalse($first->isDisposed);
+    }
+
+    #[Test]
+    public function childRenderDependencyDoesNotDirtyParentFrame(): void
+    {
+        $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
+        $model = new \stdClass();
+        $model->parentSignal = new Signal('parent');
+        $model->childSignal = new Signal('child');
+        $parent = $this->mountParent(new SlotParentComponent($model), $system);
+        $ctx = $this->renderContext($system);
+
+        $parent->render($ctx);
+        $child = $system->mounted()[0];
+        $child->render($ctx);
+        self::assertFalse($parent->isDirty);
+        self::assertFalse($child->isDirty);
+
+        $model->childSignal->set('child changed');
+
+        self::assertFalse($parent->isDirty);
+        self::assertTrue($child->isDirty);
+    }
+
+    #[Test]
+    public function parentRenderDependencyDoesNotDirtyChildFrame(): void
+    {
+        $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
+        $model = new \stdClass();
+        $model->parentSignal = new Signal('parent');
+        $model->childSignal = new Signal('child');
+        $parent = $this->mountParent(new SlotParentComponent($model), $system);
+        $ctx = $this->renderContext($system);
+
+        $parent->render($ctx);
+        $child = $system->mounted()[0];
+        $child->render($ctx);
+        self::assertFalse($parent->isDirty);
+        self::assertFalse($child->isDirty);
+
+        $model->parentSignal->set('parent changed');
+
+        self::assertTrue($parent->isDirty);
+        self::assertFalse($child->isDirty);
+    }
+
+    #[Test]
+    public function changedSlotPropsRemountAndDisposePreviousChild(): void
+    {
+        $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
+        $model = new \stdClass();
+        $model->label = new Signal('first');
+        $parent = $this->mountParent(new LabelSlotParentComponent($model), $system);
+        $ctx = $this->renderContext($system);
+
+        $parent->render($ctx);
+        $first = $system->mounted()[0];
+
+        $model->label->set('second');
+        $parent->render($ctx);
+        $second = $system->mounted()[0];
+
+        self::assertNotSame($first, $second);
+        self::assertTrue($first->isDisposed);
+        self::assertFalse($second->isDisposed);
+        self::assertCount(1, $system->mounted());
+    }
+
+    #[Test]
+    public function unusedRenderSlotsAreDisposedAfterSuccessfulParentRender(): void
+    {
+        $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
+        $model = new \stdClass();
+        $model->show = new Signal(true);
+        $model->childSignal = new Signal('child');
+        $parent = $this->mountParent(new ConditionalSlotParentComponent($model), $system);
+        $ctx = $this->renderContext($system);
+
+        $parent->render($ctx);
+        $child = $system->mounted()[0];
+
+        $model->show->set(false);
+        $parent->render($ctx);
+
+        self::assertTrue($child->isDisposed);
+        self::assertCount(0, $system->mounted());
+    }
+
+    #[Test]
+    public function failedParentRenderPreservesPreviousSuccessfulSlots(): void
+    {
+        $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
+        $model = new \stdClass();
+        $model->throw = false;
+        $model->childSignal = new Signal('child');
+        $parent = $this->mountParent(new FailingBeforeSlotParentComponent($model), $system);
+        $ctx = $this->renderContext($system);
+
+        $parent->render($ctx);
+        $child = $system->mounted()[0];
+
+        $model->throw = true;
+
+        try {
+            $parent->render($ctx);
+            self::fail('Expected failed parent render.');
+        } catch (\RuntimeException $e) {
+            self::assertSame('parent failed', $e->getMessage());
+        }
+
+        self::assertFalse($child->isDisposed);
+        self::assertSame($child, $system->mounted()[0]);
+        self::assertCount(1, $system->mounted());
+    }
+
+    #[Test]
+    public function namedPropsBeatProvidedAndScopeServices(): void
+    {
+        $scopeService = new ProvidedService('scope');
+        $providedService = new ProvidedService('provided');
+        $namedService = new ProvidedService('named');
+        $scope = $this->createStub(\Phalanx\Scope\Scope::class);
+        $scope->method('service')->willReturn($scopeService);
+        $system = new MountSystem($scope);
+        $system->provide(ProvidedService::class, $providedService);
+
+        $mounted = $system->mount(ServiceConsumerComponent::class, service: $namedService);
+        $result = $mounted->render($this->renderContext($system));
+
+        self::assertInstanceOf(TextElement::class, $result);
+        self::assertSame('named', $result->content);
+    }
+
+    #[Test]
+    public function providedDependenciesBeatScopeServices(): void
+    {
+        $scopeService = new ProvidedService('scope');
+        $providedService = new ProvidedService('provided');
+        $scope = $this->createStub(\Phalanx\Scope\Scope::class);
+        $scope->method('service')->willReturn($scopeService);
+        $system = new MountSystem($scope);
+        $system->provide(ProvidedService::class, $providedService);
+
+        $mounted = $system->mount(ServiceConsumerComponent::class);
+        $result = $mounted->render($this->renderContext($system));
+
+        self::assertInstanceOf(TextElement::class, $result);
+        self::assertSame('provided', $result->content);
+    }
+
+    #[Test]
+    public function scopeServicesResolveWhenNoPropOrProvidedDependencyExists(): void
+    {
+        $scopeService = new ProvidedService('scope');
+        $scope = $this->createStub(\Phalanx\Scope\Scope::class);
+        $scope->method('service')->willReturn($scopeService);
+        $system = new MountSystem($scope);
+
+        $mounted = $system->mount(ServiceConsumerComponent::class);
+        $result = $mounted->render($this->renderContext($system));
+
+        self::assertInstanceOf(TextElement::class, $result);
+        self::assertSame('scope', $result->content);
+    }
+
+    #[Test]
+    public function reflectionMetadataIsCachedPerMountedClass(): void
+    {
+        $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
+
+        $system->mount(ParamTestComponent::class, label: 'first');
+        $system->mount(ParamTestComponent::class, label: 'second');
+
+        self::assertSame(1, $system->reflectionCacheCount());
+    }
+
+    private function renderContext(MountSystem $system): RenderContext
+    {
+        return new RenderContext(
+            $this->createStub(\Phalanx\Scope\Scope::class),
+            new Ui(),
+            Theme::default(),
+            $system,
+        );
+    }
+
+    private function mountParent(Component $component, MountSystem $system): MountedComponent
+    {
+        $dirty = new \Phalanx\Theatron\Reactive\DirtyBatch();
+        $scanResult = \Phalanx\Theatron\Component\SignalScanner::scan($component, $dirty);
+
+        return new MountedComponent($component, $dirty, $scanResult);
+    }
 }
 
 final class SimpleTestComponent implements Component
@@ -401,5 +615,101 @@ final class BorrowedOnlyComponent implements Component
     public function __invoke(RenderContext $ctx): Renderable
     {
         return $ctx->ui->text((string) $this->input->get());
+    }
+}
+
+final class SlotParentComponent implements Component
+{
+    public function __construct(
+        private \stdClass $model,
+    ) {
+    }
+
+    public function __invoke(RenderContext $ctx): Renderable
+    {
+        $this->model->parentSignal->get();
+
+        return $ctx->ui->column(
+            $ctx->mount(SlotChildComponent::class, input: $this->model->childSignal),
+        );
+    }
+}
+
+final class SlotChildComponent implements Component
+{
+    public function __construct(
+        private Signal $input,
+    ) {
+    }
+
+    public function __invoke(RenderContext $ctx): Renderable
+    {
+        return $ctx->ui->text((string) $this->input->get());
+    }
+}
+
+final class LabelSlotParentComponent implements Component
+{
+    public function __construct(
+        private \stdClass $model,
+    ) {
+    }
+
+    public function __invoke(RenderContext $ctx): Renderable
+    {
+        return $ctx->ui->column(
+            $ctx->mount(LabelSlotChildComponent::class, label: (string) $this->model->label->get()),
+        );
+    }
+}
+
+final class LabelSlotChildComponent implements Component
+{
+    public function __construct(
+        private string $label,
+    ) {
+    }
+
+    public function __invoke(RenderContext $ctx): Renderable
+    {
+        return $ctx->ui->text($this->label);
+    }
+}
+
+final class ConditionalSlotParentComponent implements Component
+{
+    public function __construct(
+        private \stdClass $model,
+    ) {
+    }
+
+    public function __invoke(RenderContext $ctx): Renderable
+    {
+        if (!$this->model->show->get()) {
+            return $ctx->ui->column();
+        }
+
+        return $ctx->ui->column(
+            $ctx->mount(SlotChildComponent::class, input: $this->model->childSignal),
+        );
+    }
+}
+
+final class FailingBeforeSlotParentComponent implements Component
+{
+    public function __construct(
+        private \stdClass $model,
+    ) {
+    }
+
+    public function __invoke(RenderContext $ctx): Renderable
+    {
+        if ($this->model->throw) {
+            throw new \RuntimeException('parent failed');
+        }
+
+        return $ctx->ui->column(
+            $ctx->mount(SlotChildComponent::class, input: $this->model->childSignal),
+        );
     }
 }

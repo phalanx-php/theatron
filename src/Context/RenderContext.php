@@ -20,7 +20,7 @@ class RenderContext
         private(set) Scope $scope,
         private(set) Ui $ui,
         private(set) Theme $theme,
-        private MountSystem $mountSystem,
+        private(set) MountSystem $mountSystem,
         private ?BindingRegistry $bindings = null,
     ) {
     }

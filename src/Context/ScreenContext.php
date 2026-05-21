@@ -19,7 +19,7 @@ class ScreenContext
         private(set) Ui $ui,
         private(set) Theme $theme,
         private(set) Navigator $navigator,
-        private MountSystem $mountSystem,
+        private(set) MountSystem $mountSystem,
     ) {
     }
 

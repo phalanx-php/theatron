@@ -83,33 +83,40 @@ final class MountedComponent implements Renderable
             $this->cachedTheme = $ctx->theme;
         }
 
-        $frame = Tracker::push();
-        $popped = false;
+        $ctx->mountSystem->enterFrame($this);
+        $commitMountFrame = false;
         try {
-            $result = ($this->component)($ctx);
-            $deps = Tracker::pop($frame);
-            $popped = true;
-        } catch (Throwable $e) {
-            $this->dirty->request();
+            $frame = Tracker::push();
+            $popped = false;
+            try {
+                $result = ($this->component)($ctx);
+                $deps = Tracker::pop($frame);
+                $popped = true;
+            } catch (Throwable $e) {
+                $this->dirty->request();
 
-            throw $e;
-        } finally {
-            if (!$popped) {
-                Tracker::pop($frame);
+                throw $e;
+            } finally {
+                if (!$popped) {
+                    Tracker::pop($frame);
+                }
             }
+
+            try {
+                $this->renderDependencies->reconcile($deps);
+            } catch (Throwable $e) {
+                $this->dirty->request();
+
+                throw $e;
+            }
+
+            $this->lastResult = $result;
+            $commitMountFrame = true;
+
+            return $result;
+        } finally {
+            $ctx->mountSystem->leaveFrame($this, $commitMountFrame);
         }
-
-        try {
-            $this->renderDependencies->reconcile($deps);
-        } catch (Throwable $e) {
-            $this->dirty->request();
-
-            throw $e;
-        }
-
-        $this->lastResult = $result;
-
-        return $result;
     }
 
     public function rerender(): void

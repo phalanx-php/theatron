@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Phalanx\Theatron\Component;
 
+use Phalanx\Scope\TaskScope;
 use Phalanx\Theatron\Context\ScreenContext;
 use Phalanx\Theatron\Contract\Disposable as TheatronDisposable;
 use Phalanx\Theatron\Contract\Mountable;
@@ -18,17 +19,11 @@ use Phalanx\Theatron\State\StoreSubscription;
 use Phalanx\Theatron\Tdom\Renderable;
 use Throwable;
 
-/**
- * A mounted Screen instance with signal tracking, dirty batching, and dispose semantics.
- *
- * Parallel to MountedComponent but typed for Screen (ScreenContext-based invocation).
- * Workspaces persist across Navigator.go() switches; signals and subscriptions remain
- * live while the workspace is inactive.
- */
 final class MountedScreen
 {
     private(set) bool $isDisposed = false;
 
+    /** Dirty state is owned by the screen render dependency batch. */
     public bool $isDirty {
         get => $this->dirty->isDirty;
     }
@@ -46,6 +41,7 @@ final class MountedScreen
     private array $storeSubscriptions;
 
     private RenderDependencySet $renderDependencies;
+    private bool $mountLifecycleStarted = false;
 
     public function __construct(
         private(set) Screen $screen,
@@ -57,6 +53,16 @@ final class MountedScreen
         $this->subscriptions = $scanResult->subscriptions;
         $this->storeSubscriptions = $scanResult->storeSubscriptions;
         $this->dirty->request();
+    }
+
+    public function activate(TaskScope $scope): void
+    {
+        if ($this->mountLifecycleStarted || !$this->screen instanceof Mountable) {
+            return;
+        }
+
+        $this->screen->onMount($scope);
+        $this->mountLifecycleStarted = true;
     }
 
     public function render(ScreenContext $ctx): Renderable
@@ -129,6 +135,8 @@ final class MountedScreen
 
         $this->isDisposed = true;
 
+        $this->renderCtx?->mountSystem->disposeOwnedSlots($this);
+
         foreach ($this->subscriptions as $sub) {
             $sub->dispose();
         }
@@ -146,8 +154,9 @@ final class MountedScreen
         }
         $this->ownedSignals = [];
 
-        if ($this->screen instanceof Mountable) {
+        if ($this->mountLifecycleStarted && $this->screen instanceof Mountable) {
             $this->screen->onUnmount();
+            $this->mountLifecycleStarted = false;
         }
 
         if ($this->screen instanceof TheatronDisposable) {

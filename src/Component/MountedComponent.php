@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Phalanx\Theatron\Component;
 
+use Phalanx\Scope\TaskScope;
 use Phalanx\Theatron\Context\RenderContext;
 use Phalanx\Theatron\Contract\Component;
 use Phalanx\Theatron\Contract\Disposable as TheatronDisposable;
@@ -25,18 +26,23 @@ use Throwable;
 final class MountedComponent implements Renderable
 {
     private(set) bool $isDisposed = false;
+
+    /** Component-local style is supplied through stylesheet() when the component supports it. */
     public ?Style $style {
         get => null;
     }
 
+    /** Dirty state is owned by the render dependency batch. */
     public bool $isDirty {
         get => $this->dirty->isDirty;
     }
 
+    /** Signal ownership is scanned once at mount time. */
     public int $signalCount {
         get => count($this->ownedSignals);
     }
 
+    /** Active subscriptions include constructor-scanned and render-time dependencies. */
     public int $subscriptionCount {
         get => count($this->subscriptions) + $this->renderDependencies->count;
     }
@@ -45,6 +51,7 @@ final class MountedComponent implements Renderable
     private ?RenderContext $renderCtx = null;
     private ?Stylesheet $cachedStylesheet = null;
     private ?Theme $cachedTheme = null;
+    private bool $mountLifecycleStarted = false;
 
     /** @var list<Signal> */
     private array $ownedSignals;
@@ -67,6 +74,16 @@ final class MountedComponent implements Renderable
         $this->subscriptions = $scanResult->subscriptions;
         $this->storeSubscriptions = $scanResult->storeSubscriptions;
         $this->dirty->request();
+    }
+
+    public function activate(TaskScope $scope): void
+    {
+        if ($this->mountLifecycleStarted || !$this->component instanceof Mountable) {
+            return;
+        }
+
+        $this->component->onMount($scope);
+        $this->mountLifecycleStarted = true;
     }
 
     public function render(RenderContext $ctx): Renderable
@@ -149,6 +166,8 @@ final class MountedComponent implements Renderable
 
         $this->isDisposed = true;
 
+        $this->renderCtx?->mountSystem->disposeOwnedSlots($this);
+
         foreach ($this->subscriptions as $sub) {
             $sub->dispose();
         }
@@ -166,8 +185,9 @@ final class MountedComponent implements Renderable
         }
         $this->ownedSignals = [];
 
-        if ($this->component instanceof Mountable) {
+        if ($this->mountLifecycleStarted && $this->component instanceof Mountable) {
             $this->component->onUnmount();
+            $this->mountLifecycleStarted = false;
         }
 
         if ($this->component instanceof TheatronDisposable) {

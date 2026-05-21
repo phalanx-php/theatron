@@ -8,8 +8,11 @@ use Phalanx\Scope\TaskScope;
 use Phalanx\Theatron\Component\MountedComponent;
 use Phalanx\Theatron\Component\MountSystem;
 use Phalanx\Theatron\Context\RenderContext;
+use Phalanx\Theatron\Context\ScreenContext;
 use Phalanx\Theatron\Contract\Component;
 use Phalanx\Theatron\Contract\Mountable;
+use Phalanx\Theatron\Contract\Screen;
+use Phalanx\Theatron\Navigation\Navigator;
 use Phalanx\Theatron\Reactive\Signal;
 use Phalanx\Theatron\Reactive\SignalRegistry;
 use Phalanx\Theatron\Styling\Theme;
@@ -128,6 +131,22 @@ final class MountSystemTest extends TestCase
     }
 
     #[Test]
+    public function mountDerivesTaskScopeFromScopeArgument(): void
+    {
+        $tracker = new \stdClass();
+        $tracker->mounted = false;
+        $tracker->scope = null;
+
+        $taskScope = $this->createStub(TaskScope::class);
+        $system = new MountSystem($taskScope, registry: new SignalRegistry());
+
+        $system->mount(MountableTestComponent::class, tracker: $tracker);
+
+        self::assertTrue($tracker->mounted);
+        self::assertSame($taskScope, $tracker->scope);
+    }
+
+    #[Test]
     public function mountSkipsOnMountWithoutTaskScope(): void
     {
         $tracker = new \stdClass();
@@ -140,6 +159,24 @@ final class MountSystemTest extends TestCase
         $system->mount(MountableTestComponent::class, tracker: $tracker);
 
         self::assertFalse($tracker->mounted, 'onMount must not be called without TaskScope');
+
+        $system->disposeAll();
+
+        self::assertFalse($tracker->unmounted, 'onUnmount must not run when onMount never ran');
+    }
+
+    #[Test]
+    public function taskScopeDisposeRegistrationIsScopedToMountSystem(): void
+    {
+        $taskScope = $this->createMock(TaskScope::class);
+        $taskScope->expects(self::once())->method('onDispose');
+        $system = new MountSystem($taskScope);
+
+        $system->mount(SimpleTestComponent::class);
+        $system->mount(SimpleTestComponent::class);
+        $system->mount(SimpleTestComponent::class);
+
+        self::assertCount(3, $system->mounted());
     }
 
     #[Test]
@@ -174,6 +211,17 @@ final class MountSystemTest extends TestCase
 
         $b = $system->mount(SimpleTestComponent::class);
         self::assertFalse($b->isDisposed);
+    }
+
+    #[Test]
+    public function mountRejectsPositionalProps(): void
+    {
+        $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Component props must be passed as named arguments.');
+
+        $system->mount(ParamTestComponent::class, 'Apollo');
     }
 
     #[Test]
@@ -388,6 +436,96 @@ final class MountSystemTest extends TestCase
     }
 
     #[Test]
+    public function disposingParentDisposesOwnedChildSlots(): void
+    {
+        $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
+        $model = new \stdClass();
+        $model->parentSignal = new Signal('parent');
+        $model->childSignal = new Signal('child');
+        $parent = $this->mountParent(new SlotParentComponent($model), $system);
+        $ctx = $this->renderContext($system);
+
+        $parent->render($ctx);
+        $child = $system->mounted()[0];
+        $child->render($ctx);
+
+        $parent->dispose();
+
+        self::assertTrue($child->isDisposed);
+        self::assertCount(0, $system->mounted());
+    }
+
+    #[Test]
+    public function replacingNestedParentDisposesDescendantSlots(): void
+    {
+        $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
+        $model = new \stdClass();
+        $model->label = new Signal('first');
+        $model->childSignal = new Signal('child');
+        $parent = $this->mountParent(new NestedParentSlotComponent($model), $system);
+        $ctx = $this->renderContext($system);
+
+        $parent->render($ctx);
+        $nestedParent = $system->mounted()[0];
+        $nestedParent->render($ctx);
+        $descendant = $system->mounted()[1];
+
+        $model->label->set('second');
+        $parent->render($ctx);
+
+        self::assertTrue($nestedParent->isDisposed);
+        self::assertTrue($descendant->isDisposed);
+        self::assertCount(1, $system->mounted());
+    }
+
+    #[Test]
+    public function failedParentRenderRollsBackReplacementSlot(): void
+    {
+        $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
+        $model = new \stdClass();
+        $model->label = new Signal('first');
+        $model->throw = false;
+        $parent = $this->mountParent(new FailingAfterReplacementSlotParentComponent($model), $system);
+        $ctx = $this->renderContext($system);
+
+        $parent->render($ctx);
+        $first = $system->mounted()[0];
+
+        $model->label->set('second');
+        $model->throw = true;
+
+        try {
+            $parent->render($ctx);
+            self::fail('Expected failed parent render.');
+        } catch (\RuntimeException $e) {
+            self::assertSame('parent failed after replacement', $e->getMessage());
+        }
+
+        self::assertFalse($first->isDisposed);
+        self::assertSame($first, $system->mounted()[0]);
+        self::assertCount(1, $system->mounted());
+    }
+
+    #[Test]
+    public function failedParentRenderRollsBackNestedCommittedSlots(): void
+    {
+        $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
+        $model = new \stdClass();
+        $model->childSignal = new Signal('child');
+        $parent = $this->mountParent(new FailingAfterNestedChildRenderParentComponent($model), $system);
+        $ctx = $this->renderContext($system);
+
+        try {
+            $parent->render($ctx);
+            self::fail('Expected failed parent render.');
+        } catch (\RuntimeException $e) {
+            self::assertSame('parent failed after nested render', $e->getMessage());
+        }
+
+        self::assertCount(0, $system->mounted());
+    }
+
+    #[Test]
     public function failedParentRenderPreservesPreviousSuccessfulSlots(): void
     {
         $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
@@ -412,6 +550,50 @@ final class MountSystemTest extends TestCase
         self::assertFalse($child->isDisposed);
         self::assertSame($child, $system->mounted()[0]);
         self::assertCount(1, $system->mounted());
+    }
+
+    #[Test]
+    public function disposingMountedScreenDisposesOwnedSlots(): void
+    {
+        $scope = $this->createStub(TaskScope::class);
+        $system = new MountSystem($scope);
+        $model = new \stdClass();
+        $model->childSignal = new Signal('child');
+        $screen = $system->mountScreen(SlotOwnerScreen::class, model: $model);
+
+        $screen->render($this->screenContext($system, $scope));
+        $child = $system->mounted()[0];
+        $child->render($this->renderContext($system));
+
+        $screen->dispose();
+
+        self::assertTrue($child->isDisposed);
+        self::assertCount(0, $system->mounted());
+    }
+
+    #[Test]
+    public function changingProvidedDependencyRemountsStableSlots(): void
+    {
+        $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
+        $parent = $this->mountParent(new AmbientServiceSlotParentComponent(), $system);
+        $ctx = $this->renderContext($system);
+
+        $system->provide(ProvidedService::class, new ProvidedService('first'));
+        $parent->render($ctx);
+        $first = $system->mounted()[0];
+        $firstResult = $first->render($ctx);
+
+        $system->provide(ProvidedService::class, new ProvidedService('second'));
+        $parent->render($ctx);
+        $second = $system->mounted()[0];
+        $secondResult = $second->render($ctx);
+
+        self::assertNotSame($first, $second);
+        self::assertTrue($first->isDisposed);
+        self::assertInstanceOf(TextElement::class, $firstResult);
+        self::assertInstanceOf(TextElement::class, $secondResult);
+        self::assertSame('first', $firstResult->content);
+        self::assertSame('second', $secondResult->content);
     }
 
     #[Test]
@@ -464,23 +646,23 @@ final class MountSystemTest extends TestCase
         self::assertSame('scope', $result->content);
     }
 
-    #[Test]
-    public function reflectionMetadataIsCachedPerMountedClass(): void
-    {
-        $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
-
-        $system->mount(ParamTestComponent::class, label: 'first');
-        $system->mount(ParamTestComponent::class, label: 'second');
-
-        self::assertSame(1, $system->reflectionCacheCount());
-    }
-
     private function renderContext(MountSystem $system): RenderContext
     {
         return new RenderContext(
             $this->createStub(\Phalanx\Scope\Scope::class),
             new Ui(),
             Theme::default(),
+            $system,
+        );
+    }
+
+    private function screenContext(MountSystem $system, TaskScope $scope): ScreenContext
+    {
+        return new ScreenContext(
+            $scope,
+            new Ui(),
+            Theme::default(),
+            $this->createStub(Navigator::class),
             $system,
         );
     }
@@ -709,6 +891,102 @@ final class FailingBeforeSlotParentComponent implements Component
         }
 
         return $ctx->ui->column(
+            $ctx->mount(SlotChildComponent::class, input: $this->model->childSignal),
+        );
+    }
+}
+
+final class FailingAfterReplacementSlotParentComponent implements Component
+{
+    public function __construct(
+        private \stdClass $model,
+    ) {
+    }
+
+    public function __invoke(RenderContext $ctx): Renderable
+    {
+        $child = $ctx->mount(LabelSlotChildComponent::class, label: (string) $this->model->label->get());
+
+        if ($this->model->throw) {
+            throw new \RuntimeException('parent failed after replacement');
+        }
+
+        return $ctx->ui->column($child);
+    }
+}
+
+final class FailingAfterNestedChildRenderParentComponent implements Component
+{
+    public function __construct(
+        private \stdClass $model,
+    ) {
+    }
+
+    public function __invoke(RenderContext $ctx): Renderable
+    {
+        $child = $ctx->mount(NestedChildSlotComponent::class, label: 'nested', model: $this->model);
+        $child->render($ctx);
+
+        throw new \RuntimeException('parent failed after nested render');
+    }
+}
+
+final class AmbientServiceSlotParentComponent implements Component
+{
+    public function __invoke(RenderContext $ctx): Renderable
+    {
+        return $ctx->ui->column(
+            $ctx->mount(ServiceConsumerComponent::class),
+        );
+    }
+}
+
+final class SlotOwnerScreen implements Screen
+{
+    public function __construct(
+        private \stdClass $model,
+    ) {
+    }
+
+    public function __invoke(ScreenContext $ctx): Renderable
+    {
+        return $ctx->ui->column(
+            $ctx->mount(SlotChildComponent::class, input: $this->model->childSignal),
+        );
+    }
+}
+
+final class NestedParentSlotComponent implements Component
+{
+    public function __construct(
+        private \stdClass $model,
+    ) {
+    }
+
+    public function __invoke(RenderContext $ctx): Renderable
+    {
+        return $ctx->ui->column(
+            $ctx->mount(
+                NestedChildSlotComponent::class,
+                label: (string) $this->model->label->get(),
+                model: $this->model,
+            ),
+        );
+    }
+}
+
+final class NestedChildSlotComponent implements Component
+{
+    public function __construct(
+        private string $label,
+        private \stdClass $model,
+    ) {
+    }
+
+    public function __invoke(RenderContext $ctx): Renderable
+    {
+        return $ctx->ui->column(
+            $ctx->ui->text($this->label),
             $ctx->mount(SlotChildComponent::class, input: $this->model->childSignal),
         );
     }

@@ -8,7 +8,6 @@ use Phalanx\Exception\ServiceNotFoundException;
 use Phalanx\Scope\Scope;
 use Phalanx\Scope\TaskScope;
 use Phalanx\Theatron\Contract\Component;
-use Phalanx\Theatron\Contract\Mountable;
 use Phalanx\Theatron\Contract\Screen;
 use Phalanx\Theatron\Reactive\DirtyBatch;
 use Phalanx\Theatron\Reactive\SignalRegistry;
@@ -23,8 +22,13 @@ final class MountSystem
     /** @var array<class-string, object> */
     private array $provided = [];
 
+    private int $providedVersion = 0;
+
     /** @var array<class-string, ReflectionClass<object>> */
     private array $reflectionCache = [];
+
+    /** @var list<MountedScreen> */
+    private array $mountedScreens = [];
 
     /**
      * @var list<array{
@@ -46,9 +50,21 @@ final class MountSystem
         private ?TaskScope $taskScope = null,
         private ?SignalRegistry $registry = null,
     ) {
+        $this->taskScope ??= $scope instanceof TaskScope ? $scope : null;
+
+        if ($this->taskScope !== null) {
+            $self = $this;
+            $this->taskScope->onDispose(static function () use ($self): void {
+                $self->disposeAll();
+            });
+        }
     }
 
-    /** @param class-string $class */
+    /**
+     * @template T of object
+     * @param class-string<T> $class
+     * @param T $instance
+     */
     public function provide(string $class, object $instance): void
     {
         if (!$instance instanceof $class) {
@@ -56,6 +72,7 @@ final class MountSystem
         }
 
         $this->provided[$class] = $instance;
+        $this->providedVersion++;
     }
 
     /**
@@ -70,7 +87,7 @@ final class MountSystem
         if ($slot !== null) {
             [$frameIndex, $owner, $index] = $slot;
             $key = self::slotKey($owner, $index);
-            $signature = $component . ':' . self::signature($namedParams);
+            $signature = $component . ':' . $this->providedVersion . ':' . self::signature($namedParams);
             $pending = $this->frames[$frameIndex]['pending'][$key] ?? null;
             $existing = $this->slots[$key] ?? null;
 
@@ -86,7 +103,7 @@ final class MountSystem
                 return $existing;
             }
 
-            $mounted = $this->mountFresh($component, $namedParams);
+            $mounted = $this->mountFresh($component, $namedParams, activate: false);
             $this->frames[$frameIndex]['pending'][$key] = [
                 'signature' => $signature,
                 'mounted' => $mounted,
@@ -134,6 +151,7 @@ final class MountSystem
 
             $this->slots[$key] = $replacement['mounted'];
             $this->slotSignatures[$key] = $replacement['signature'];
+            $this->activateMounted($replacement['mounted']);
         }
 
         $this->disposeUnusedSlots($ownerId, $frame['next']);
@@ -152,16 +170,8 @@ final class MountSystem
 
         $scanResult = SignalScanner::scan($instance, $dirty, $namedParams, $this->registry);
         $mounted = new MountedScreen($instance, $dirty, $scanResult);
-
-        if ($this->taskScope !== null) {
-            $this->taskScope->onDispose(static function () use ($mounted): void {
-                $mounted->dispose();
-            });
-        }
-
-        if ($instance instanceof Mountable && $this->taskScope !== null) {
-            $instance->onMount($this->taskScope);
-        }
+        $this->mountedScreens[] = $mounted;
+        $this->activateScreen($mounted);
 
         return $mounted;
     }
@@ -172,22 +182,28 @@ final class MountSystem
         return $this->mounted;
     }
 
-    public function reflectionCacheCount(): int
-    {
-        return count($this->reflectionCache);
-    }
-
     public function disposeAll(): void
     {
         $mounted = $this->mounted;
+        $screens = $this->mountedScreens;
         $this->mounted = [];
+        $this->mountedScreens = [];
         $this->slots = [];
         $this->slotSignatures = [];
         $this->frames = [];
 
+        foreach ($screens as $screen) {
+            $screen->dispose();
+        }
+
         foreach ($mounted as $component) {
             $component->dispose();
         }
+    }
+
+    public function disposeOwnedSlots(object $owner): void
+    {
+        $this->disposeSlotsForOwner(spl_object_id($owner));
     }
 
     private static function slotKey(int $owner, int $slot): string
@@ -239,9 +255,11 @@ final class MountSystem
     {
         $named = [];
         foreach ($params as $key => $value) {
-            if (is_string($key)) {
-                $named[$key] = $value;
+            if (!is_string($key)) {
+                throw new \InvalidArgumentException('Component props must be passed as named arguments.');
             }
+
+            $named[$key] = $value;
         }
 
         return $named;
@@ -252,7 +270,7 @@ final class MountSystem
      * @param class-string<T> $component
      * @param array<string, mixed> $namedParams
      */
-    private function mountFresh(string $component, array $namedParams): MountedComponent
+    private function mountFresh(string $component, array $namedParams, bool $activate = true): MountedComponent
     {
         /** @var Component $instance */
         $instance = $this->resolveInstance($component, $namedParams);
@@ -262,17 +280,25 @@ final class MountSystem
         $mounted = new MountedComponent($instance, $dirty, $scanResult);
         $this->mounted[] = $mounted;
 
-        if ($this->taskScope !== null) {
-            $this->taskScope->onDispose(static function () use ($mounted): void {
-                $mounted->dispose();
-            });
-        }
-
-        if ($instance instanceof Mountable && $this->taskScope !== null) {
-            $instance->onMount($this->taskScope);
+        if ($activate) {
+            $this->activateMounted($mounted);
         }
 
         return $mounted;
+    }
+
+    private function activateMounted(MountedComponent $mounted): void
+    {
+        if ($this->taskScope !== null) {
+            $mounted->activate($this->taskScope);
+        }
+    }
+
+    private function activateScreen(MountedScreen $mounted): void
+    {
+        if ($this->taskScope !== null) {
+            $mounted->activate($this->taskScope);
+        }
     }
 
     /**
@@ -345,6 +371,7 @@ final class MountSystem
     private function disposeUnusedSlots(int $owner, int $used): void
     {
         $prefix = $owner . ':';
+        $unused = [];
 
         foreach ($this->slots as $key => $mounted) {
             if (!str_starts_with($key, $prefix)) {
@@ -356,9 +383,33 @@ final class MountSystem
                 continue;
             }
 
+            $unused[$key] = $mounted;
+        }
+
+        foreach ($unused as $key => $mounted) {
             $mounted->dispose();
             $this->forgetMounted($mounted);
             unset($this->slots[$key], $this->slotSignatures[$key]);
+        }
+    }
+
+    private function disposeSlotsForOwner(int $owner): void
+    {
+        $prefix = $owner . ':';
+        $owned = [];
+
+        foreach ($this->slots as $key => $mounted) {
+            if (!str_starts_with($key, $prefix)) {
+                continue;
+            }
+
+            $owned[$key] = $mounted;
+        }
+
+        foreach ($owned as $key => $mounted) {
+            unset($this->slots[$key], $this->slotSignatures[$key]);
+            $mounted->dispose();
+            $this->forgetMounted($mounted);
         }
     }
 

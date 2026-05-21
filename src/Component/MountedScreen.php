@@ -74,13 +74,20 @@ final class MountedScreen
         $this->renderCtx = $ctx;
         $this->dirty->consume();
 
+        $screen = $this->screen;
         $ctx->mountSystem->enterFrame($this);
         $commitMountFrame = false;
         try {
             $frame = Tracker::push();
             $popped = false;
             try {
-                $result = $ctx->mountSystem->resolve(($this->screen)($ctx));
+                $result = $ctx->renderDiagnostics->screen(
+                    $ctx->scope,
+                    $screen,
+                    static fn(): Renderable => $ctx->mountSystem->resolve(
+                        $screen($ctx),
+                    ),
+                );
                 $deps = Tracker::pop($frame);
                 $popped = true;
             } catch (Throwable $e) {

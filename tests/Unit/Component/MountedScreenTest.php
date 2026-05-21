@@ -15,9 +15,12 @@ use Phalanx\Theatron\Reactive\Computed;
 use Phalanx\Theatron\Reactive\DirtyBatch;
 use Phalanx\Theatron\Reactive\Resource;
 use Phalanx\Theatron\Reactive\Signal;
+use Phalanx\Theatron\Rendering\RenderDiagnostics;
 use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Tdom\Ui;
+use Phalanx\Theatron\Tests\Support\RecordingTaskScope;
+use Phalanx\Trace\TraceType;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -219,6 +222,78 @@ final class MountedScreenTest extends TestCase
         self::assertSame(1, $model->good->subscriberCount);
     }
 
+    #[Test]
+    public function slowScreenRenderEmitsTraceDiagnosticAndUsesTaskScopeWaitReason(): void
+    {
+        $times = [1.0, 1.08];
+        $scope = new RecordingTaskScope();
+        $diagnostics = RenderDiagnostics::supervised(
+            slowThresholdSeconds: 0.05,
+            clock: static function () use (&$times): float {
+                return array_shift($times) ?? 1.08;
+            },
+        );
+
+        $mounted = $this->createMounted(new class () implements Screen {
+            public function __invoke(ScreenContext $ctx): Renderable
+            {
+                return $ctx->ui->text('slow');
+            }
+        });
+
+        $mounted->render($this->createObservedScreenCtx($scope, $diagnostics));
+
+        $events = $scope->trace()->events();
+        $waitReason = $scope->lastWaitReason();
+
+        self::assertSame(1, $scope->callCount());
+        self::assertNotNull($waitReason);
+        self::assertSame('custom', $waitReason->kind->value);
+        self::assertStringStartsWith('theatron.render screen', $waitReason->detail);
+        self::assertCount(1, $events);
+        self::assertSame(TraceType::Lifecycle, $events[0]->type);
+        self::assertSame('theatron.render.slow', $events[0]->name);
+        self::assertSame('screen', $events[0]->attrs['kind']);
+        self::assertEqualsWithDelta(80.0, $events[0]->attrs['elapsed_ms'], 0.001);
+    }
+
+    #[Test]
+    public function failedScreenRenderEmitsTraceDiagnosticAndLeavesScreenDirty(): void
+    {
+        $times = [2.0, 2.004];
+        $scope = new RecordingTaskScope();
+        $diagnostics = RenderDiagnostics::supervised(
+            slowThresholdSeconds: 1.0,
+            clock: static function () use (&$times): float {
+                return array_shift($times) ?? 2.004;
+            },
+        );
+
+        $mounted = $this->createMounted(new class () implements Screen {
+            public function __invoke(ScreenContext $ctx): Renderable
+            {
+                throw new \RuntimeException('screen failed');
+            }
+        });
+
+        try {
+            $mounted->render($this->createObservedScreenCtx($scope, $diagnostics));
+            self::fail('Expected failed screen render.');
+        } catch (\RuntimeException $e) {
+            self::assertSame('screen failed', $e->getMessage());
+        }
+
+        $events = $scope->trace()->events();
+        self::assertTrue($mounted->isDirty);
+        self::assertSame(1, $scope->callCount());
+        self::assertCount(1, $events);
+        self::assertSame(TraceType::Failed, $events[0]->type);
+        self::assertSame('theatron.render.failed', $events[0]->name);
+        self::assertSame('screen', $events[0]->attrs['kind']);
+        self::assertSame(\RuntimeException::class, $events[0]->attrs['error']);
+        self::assertSame('screen failed', $events[0]->attrs['message']);
+    }
+
     private function createMounted(Screen $screen): MountedScreen
     {
         $batch = new DirtyBatch();
@@ -237,6 +312,20 @@ final class MountedScreenTest extends TestCase
             Theme::default(),
             $this->createStub(Navigator::class),
             new MountSystem($scope),
+        );
+    }
+
+    private function createObservedScreenCtx(
+        RecordingTaskScope $scope,
+        RenderDiagnostics $diagnostics,
+    ): ScreenContext {
+        return new ScreenContext(
+            $scope,
+            new Ui(),
+            Theme::default(),
+            $this->createStub(Navigator::class),
+            new MountSystem($scope),
+            $diagnostics,
         );
     }
 }

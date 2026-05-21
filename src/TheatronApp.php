@@ -26,6 +26,7 @@ use Phalanx\Theatron\Kit\ScreenLayout;
 use Phalanx\Theatron\Navigation\WorkspaceNavigator;
 use Phalanx\Theatron\Reactive\SignalRegistry;
 use Phalanx\Theatron\Rendering\Region;
+use Phalanx\Theatron\Rendering\RenderDiagnostics;
 use Phalanx\Theatron\Stage\Stage;
 use Phalanx\Theatron\State\Store;
 use Phalanx\Theatron\Styling\Theme;
@@ -76,8 +77,9 @@ final class TheatronApp
         $registry->activateScreen($this->screens[0]);
 
         $ui = new Ui($this->theme);
-        $screenCtx = new ScreenContext($scope, $ui, $this->theme, $navigator, $mountSystem);
-        $renderCtx = new RenderContext($scope, $ui, $this->theme, $mountSystem, $registry);
+        $renderDiagnostics = RenderDiagnostics::supervised();
+        $screenCtx = new ScreenContext($scope, $ui, $this->theme, $navigator, $mountSystem, $renderDiagnostics);
+        $renderCtx = new RenderContext($scope, $ui, $this->theme, $mountSystem, $registry, $renderDiagnostics);
         $statusMountOwner = new \stdClass();
 
         $layout = ScreenLayout::mainWithStatusBar();

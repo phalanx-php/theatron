@@ -100,13 +100,20 @@ final class MountedComponent implements Renderable
             $this->cachedTheme = $ctx->theme;
         }
 
+        $component = $this->component;
         $ctx->mountSystem->enterFrame($this);
         $commitMountFrame = false;
         try {
             $frame = Tracker::push();
             $popped = false;
             try {
-                $result = $ctx->mountSystem->resolve(($this->component)($ctx));
+                $result = $ctx->renderDiagnostics->component(
+                    $ctx->scope,
+                    $component,
+                    static fn(): Renderable => $ctx->mountSystem->resolve(
+                        $component($ctx),
+                    ),
+                );
                 $deps = Tracker::pop($frame);
                 $popped = true;
             } catch (Throwable $e) {

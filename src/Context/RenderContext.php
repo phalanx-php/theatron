@@ -10,19 +10,24 @@ use Phalanx\Theatron\Binding\BindingRegistry;
 use Phalanx\Theatron\Component\MountedComponent;
 use Phalanx\Theatron\Component\MountSystem;
 use Phalanx\Theatron\Contract\Component;
+use Phalanx\Theatron\Rendering\RenderDiagnostics;
 use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Tdom\Ui;
 
 class RenderContext
 {
+    private(set) RenderDiagnostics $renderDiagnostics;
+
     public function __construct(
         private(set) Scope $scope,
         private(set) Ui $ui,
         private(set) Theme $theme,
         private(set) MountSystem $mountSystem,
         private ?BindingRegistry $bindings = null,
+        ?RenderDiagnostics $renderDiagnostics = null,
     ) {
+        $this->renderDiagnostics = $renderDiagnostics ?? new RenderDiagnostics();
     }
 
     /**

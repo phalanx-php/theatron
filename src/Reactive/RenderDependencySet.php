@@ -13,8 +13,17 @@ final class RenderDependencySet
     /** @var array<int, SignalSubscription|ComputedSubscription|ResourceSubscription> */
     private array $subscriptions = [];
 
-    public function __construct(private DirtyBatch $batch)
-    {
+    /** @var array<int, true> */
+    private array $ignored = [];
+
+    /** @param list<Signal|Resource> $ignored */
+    public function __construct(
+        private DirtyBatch $batch,
+        array $ignored = [],
+    ) {
+        foreach ($ignored as $dep) {
+            $this->ignored[spl_object_id($dep)] = true;
+        }
     }
 
     /** @param list<object> $deps */
@@ -24,13 +33,37 @@ final class RenderDependencySet
         $next = [];
 
         foreach ($deps as $dep) {
+            $id = spl_object_id($dep);
+            if (isset($this->ignored[$id])) {
+                continue;
+            }
+
             if (
                 $dep instanceof Signal
                 || $dep instanceof Computed
                 || $dep instanceof Resource
             ) {
-                $next[spl_object_id($dep)] = $dep;
+                $next[$id] = $dep;
             }
+        }
+
+        /** @var array<int, SignalSubscription|ComputedSubscription|ResourceSubscription> $added */
+        $added = [];
+
+        try {
+            foreach ($next as $id => $dep) {
+                if (isset($this->subscriptions[$id])) {
+                    continue;
+                }
+
+                $added[$id] = $this->subscribe($dep);
+            }
+        } catch (\Throwable $e) {
+            foreach ($added as $subscription) {
+                $subscription->dispose();
+            }
+
+            throw $e;
         }
 
         foreach ($this->subscriptions as $id => $subscription) {
@@ -42,13 +75,7 @@ final class RenderDependencySet
             unset($this->subscriptions[$id]);
         }
 
-        foreach ($next as $id => $dep) {
-            if (isset($this->subscriptions[$id])) {
-                continue;
-            }
-
-            $this->subscriptions[$id] = $this->subscribe($dep);
-        }
+        $this->subscriptions += $added;
     }
 
     public function dispose(): void

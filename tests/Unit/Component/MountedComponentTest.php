@@ -147,6 +147,8 @@ final class MountedComponentTest extends TestCase
 
         $mounted->render($this->createRenderCtx());
         self::assertFalse($mounted->isDirty);
+        self::assertSame(1, $component->count->subscriberCount);
+        self::assertSame(1, $mounted->subscriptionCount);
 
         $component->count->set(42);
 
@@ -220,6 +222,81 @@ final class MountedComponentTest extends TestCase
 
         $model->reply->stream();
 
+        self::assertTrue($mounted->isDirty);
+    }
+
+    #[Test]
+    public function typedResourceReadDuringRenderDoesNotDuplicateScannerSubscription(): void
+    {
+        $component = new class (new Resource(static fn(): iterable => ['streamed'])) implements Component {
+            public function __construct(
+                private(set) Resource $reply,
+            ) {
+            }
+
+            public function __invoke(RenderContext $ctx): Renderable
+            {
+                return $ctx->ui->text($this->reply->buffer);
+            }
+        };
+
+        $mounted = $this->createMounted($component);
+        self::assertSame(1, $component->reply->subscriberCount);
+
+        $mounted->render($this->createRenderCtx());
+
+        self::assertSame(1, $component->reply->subscriberCount);
+        self::assertSame(1, $mounted->subscriptionCount);
+    }
+
+    #[Test]
+    public function resourceStatusReadsDuringRenderMarkDirty(): void
+    {
+        $calls = 0;
+        $model = new \stdClass();
+        $model->reply = new Resource(
+            fetcher: static function () use (&$calls): string {
+                $calls++;
+
+                if ($calls > 1) {
+                    throw new \RuntimeException('failed');
+                }
+
+                return 'ready';
+            },
+        );
+
+        $component = new class ($model) implements Component {
+            public function __construct(private \stdClass $model)
+            {
+            }
+
+            public function __invoke(RenderContext $ctx): Renderable
+            {
+                $error = $this->model->reply->error?->getMessage() ?? '';
+
+                return $ctx->ui->text(sprintf(
+                    '%s:%s:%s:%s',
+                    $this->model->reply->loading ? 'loading' : 'idle',
+                    $this->model->reply->ok ? 'ok' : 'pending',
+                    (string) $this->model->reply->value,
+                    $error,
+                ));
+            }
+        };
+
+        $mounted = $this->createMounted($component);
+        $ctx = $this->createRenderCtx();
+        $mounted->render($ctx);
+        self::assertFalse($mounted->isDirty);
+
+        $model->reply->refresh();
+        self::assertTrue($mounted->isDirty);
+
+        $mounted->render($ctx);
+        self::assertFalse($mounted->isDirty);
+
+        $model->reply->refresh();
         self::assertTrue($mounted->isDirty);
     }
 
@@ -317,11 +394,73 @@ final class MountedComponentTest extends TestCase
             self::assertSame('render failed', $e->getMessage());
         }
 
+        self::assertTrue($mounted->isDirty, 'Failed render must leave mounted component dirty');
+        $model->throw = false;
+
+        $mounted->render($ctx);
+        self::assertFalse($mounted->isDirty);
+
+        $model->throw = true;
+
+        try {
+            $mounted->render($ctx);
+            self::fail('Expected failed render.');
+        } catch (\RuntimeException $e) {
+            self::assertSame('render failed', $e->getMessage());
+        }
+
+        $model->throw = false;
+
+        $mounted->render($ctx);
+        self::assertFalse($mounted->isDirty);
+
         $model->bad->set('bad changed');
         self::assertFalse($mounted->isDirty, 'Failed render deps must not replace previous deps');
 
         $model->good->set('good changed');
         self::assertTrue($mounted->isDirty, 'Previous successful render deps must remain active');
+    }
+
+    #[Test]
+    public function failedReconcileLeavesPreviousRenderDependenciesSubscribed(): void
+    {
+        $model = new \stdClass();
+        $model->useBad = new Signal(false);
+        $model->good = new Signal('good');
+        $model->bad = new Signal('bad');
+        $model->bad->dispose();
+
+        $component = new class ($model) implements Component {
+            public function __construct(private \stdClass $model)
+            {
+            }
+
+            public function __invoke(RenderContext $ctx): Renderable
+            {
+                $value = $this->model->useBad->get()
+                    ? $this->model->bad->get()
+                    : $this->model->good->get();
+
+                return $ctx->ui->text((string) $value);
+            }
+        };
+
+        $mounted = $this->createMounted($component);
+        $ctx = $this->createRenderCtx();
+        $mounted->render($ctx);
+        self::assertSame(1, $model->good->subscriberCount);
+
+        $model->useBad->set(true);
+
+        try {
+            $mounted->render($ctx);
+            self::fail('Expected disposed render dependency subscription failure.');
+        } catch (\RuntimeException $e) {
+            self::assertSame('Cannot subscribe to a disposed signal.', $e->getMessage());
+        }
+
+        self::assertTrue($mounted->isDirty);
+        self::assertSame(1, $model->good->subscriberCount);
     }
 
     #[Test]

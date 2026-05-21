@@ -40,6 +40,10 @@ final class Resource
         get => $this->readBuffer();
     }
 
+    public int $subscriberCount {
+        get => $this->countSubscribers();
+    }
+
     private bool $disposed = false;
     private int $generation = 0;
     private int $nextSubscriberId = 0;
@@ -336,6 +340,11 @@ final class Resource
         Tracker::recordAccess($this);
 
         return $this->bufferValue;
+    }
+
+    private function countSubscribers(): int
+    {
+        return count($this->subscribers);
     }
 
     private function cancelCurrentTask(): void

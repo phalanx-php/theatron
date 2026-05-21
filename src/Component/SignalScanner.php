@@ -24,6 +24,7 @@ final class SignalScanner
         $ownedSignals = [];
         $subscriptions = [];
         $storeSubscriptions = [];
+        $renderIgnoredReactives = [];
 
         /** @var array<int, true> */
         $borrowed = [];
@@ -51,6 +52,7 @@ final class SignalScanner
                 $subscriptions[] = $value->subscribe(static function () use ($batch): void {
                     $batch->request();
                 });
+                $renderIgnoredReactives[] = $value;
 
                 if (!isset($borrowed[spl_object_id($value)])) {
                     $ownedSignals[] = $value;
@@ -65,6 +67,7 @@ final class SignalScanner
                 $subscriptions[] = $value->subscribe(static function () use ($batch): void {
                     $batch->request();
                 });
+                $renderIgnoredReactives[] = $value;
             } elseif (is_a($typeName, Store::class, true)) {
                 $value = $prop->getValue($component);
                 if (!$value instanceof Store) {
@@ -77,6 +80,6 @@ final class SignalScanner
             }
         }
 
-        return new SignalScanResult($ownedSignals, $subscriptions, $storeSubscriptions);
+        return new SignalScanResult($ownedSignals, $subscriptions, $storeSubscriptions, $renderIgnoredReactives);
     }
 }

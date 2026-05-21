@@ -16,6 +16,7 @@ use Phalanx\Theatron\Reactive\SignalSubscription;
 use Phalanx\Theatron\Reactive\Tracker;
 use Phalanx\Theatron\State\StoreSubscription;
 use Phalanx\Theatron\Tdom\Renderable;
+use Throwable;
 
 /**
  * A mounted Screen instance with signal tracking, dirty batching, and dispose semantics.
@@ -51,7 +52,7 @@ final class MountedScreen
         private(set) DirtyBatch $dirty,
         SignalScanResult $scanResult,
     ) {
-        $this->renderDependencies = new RenderDependencySet($this->dirty);
+        $this->renderDependencies = new RenderDependencySet($this->dirty, $scanResult->renderIgnoredReactives);
         $this->ownedSignals = $scanResult->ownedSignals;
         $this->subscriptions = $scanResult->subscriptions;
         $this->storeSubscriptions = $scanResult->storeSubscriptions;
@@ -73,13 +74,24 @@ final class MountedScreen
             $result = ($this->screen)($ctx);
             $deps = Tracker::pop($frame);
             $popped = true;
+        } catch (Throwable $e) {
+            $this->dirty->request();
+
+            throw $e;
         } finally {
             if (!$popped) {
                 Tracker::pop($frame);
             }
         }
 
-        $this->renderDependencies->reconcile($deps);
+        try {
+            $this->renderDependencies->reconcile($deps);
+        } catch (Throwable $e) {
+            $this->dirty->request();
+
+            throw $e;
+        }
+
         $this->lastResult = $result;
 
         return $result;

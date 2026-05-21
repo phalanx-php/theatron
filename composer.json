@@ -74,6 +74,9 @@
     },
     "bin": ["bin/theatron"],
     "autoload": {
+        "files": [
+            "src/Ui/functions.php"
+        ],
         "psr-4": {
             "Phalanx\\Theatron\\": "src/"
         }

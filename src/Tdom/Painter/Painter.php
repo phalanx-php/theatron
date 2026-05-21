@@ -13,6 +13,7 @@ use Phalanx\Theatron\Tdom\Element\ColumnElement;
 use Phalanx\Theatron\Tdom\Element\DividerElement;
 use Phalanx\Theatron\Tdom\Element\GridElement;
 use Phalanx\Theatron\Tdom\Element\InputElement;
+use Phalanx\Theatron\Tdom\Element\MountElement;
 use Phalanx\Theatron\Tdom\Element\PanelElement;
 use Phalanx\Theatron\Tdom\Element\ProgressElement;
 use Phalanx\Theatron\Tdom\Element\RowElement;
@@ -35,15 +36,84 @@ final class Painter
 
     public static function paint(Renderable $node, PaintContext $ctx): void
     {
+        $renderCtx = $ctx->renderContext;
+
+        if ($renderCtx === null || $ctx->hasMountFrame() || $ctx->hasPaintBoundary()) {
+            self::paintResolved($node, $ctx);
+
+            return;
+        }
+
+        $renderCtx->mountSystem->enterFrame($ctx->mountOwner());
+        $commitMountFrame = false;
+        $ctx->enterMountFrame();
+
+        try {
+            $node = $renderCtx->mountSystem->resolve($node);
+            $commitMountFrame = true;
+        } finally {
+            $ctx->leaveMountFrame();
+            $renderCtx->mountSystem->leaveFrame($ctx->mountOwner(), $commitMountFrame);
+        }
+
+        $ctx->enterPaintBoundary();
+
+        try {
+            self::paintResolved($node, $ctx);
+        } finally {
+            $ctx->leavePaintBoundary();
+        }
+    }
+
+    public static function resolveAnsiStyle(?TdomStyle $style): AnsiStyle
+    {
+        if ($style === null) {
+            return self::$emptyStyle ??= AnsiStyle::new();
+        }
+
+        $cache = self::$styleCache ??= new \WeakMap();
+
+        return $cache[$style] ??= AnsiStyle::of($style->color, $style->background);
+    }
+
+    public static function reset(): void
+    {
+        self::$styleCache = null;
+        self::$bgCache = null;
+        self::$emptyStyle = null;
+    }
+
+    private static function paintResolved(Renderable $node, PaintContext $ctx): void
+    {
+        $renderCtx = $ctx->renderContext;
+
+        if ($node instanceof MountElement) {
+            if ($renderCtx === null) {
+                throw new \RuntimeException('Mount elements require a render context.');
+            }
+
+            if (!$ctx->hasMountFrame()) {
+                throw new \RuntimeException('Mount elements must be resolved before painting.');
+            }
+
+            self::paint($renderCtx->mountSystem->resolve($node), $ctx);
+
+            return;
+        }
+
         if ($node instanceof MountedComponent) {
             if ($node->isDirty) {
-                $node->rerender();
+                if ($ctx->renderContext !== null) {
+                    $node->render($ctx->renderContext);
+                } else {
+                    $node->rerender();
+                }
             }
             $inner = $node->lastResult();
             if ($inner !== null) {
                 $sheet = $node->stylesheet();
                 $childCtx = $sheet !== null
-                    ? new PaintContext($ctx->area, $ctx->buffer, $sheet)
+                    ? $ctx->withStylesheet($sheet)
                     : $ctx;
                 self::paint($inner, $childCtx);
             }
@@ -93,24 +163,6 @@ final class Painter
             $node instanceof ProgressElement => ProgressPainter::paint($node, $paintCtx),
             default => null,
         };
-    }
-
-    public static function resolveAnsiStyle(?TdomStyle $style): AnsiStyle
-    {
-        if ($style === null) {
-            return self::$emptyStyle ??= AnsiStyle::new();
-        }
-
-        $cache = self::$styleCache ??= new \WeakMap();
-
-        return $cache[$style] ??= AnsiStyle::of($style->color, $style->background);
-    }
-
-    public static function reset(): void
-    {
-        self::$styleCache = null;
-        self::$bgCache = null;
-        self::$emptyStyle = null;
     }
 
     private static function resolveEffectiveStyle(Element $node, ?Stylesheet $stylesheet): ?TdomStyle

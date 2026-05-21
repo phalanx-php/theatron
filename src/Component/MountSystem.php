@@ -11,6 +11,13 @@ use Phalanx\Theatron\Contract\Component;
 use Phalanx\Theatron\Contract\Screen;
 use Phalanx\Theatron\Reactive\DirtyBatch;
 use Phalanx\Theatron\Reactive\SignalRegistry;
+use Phalanx\Theatron\Tdom\Element\ColumnElement;
+use Phalanx\Theatron\Tdom\Element\GridElement;
+use Phalanx\Theatron\Tdom\Element\MountElement;
+use Phalanx\Theatron\Tdom\Element\PanelElement;
+use Phalanx\Theatron\Tdom\Element\RowElement;
+use Phalanx\Theatron\Tdom\Element\StatusLineElement;
+use Phalanx\Theatron\Tdom\Renderable;
 use ReflectionClass;
 use ReflectionNamedType;
 
@@ -204,6 +211,52 @@ final class MountSystem
     public function disposeOwnedSlots(object $owner): void
     {
         $this->disposeSlotsForOwner(spl_object_id($owner));
+    }
+
+    public function hasDirtyOwnedSlots(object $owner): bool
+    {
+        $visited = [];
+
+        return $this->hasDirtySlotsForOwner(spl_object_id($owner), $visited);
+    }
+
+    public function resolve(Renderable $node): Renderable
+    {
+        if ($node instanceof MountElement) {
+            return $this->mount($node->component, ...$node->props);
+        }
+
+        if ($node instanceof ColumnElement) {
+            $children = $this->resolveList($node->children);
+
+            return $children === $node->children ? $node : new ColumnElement($children, $node->style);
+        }
+
+        if ($node instanceof RowElement) {
+            $children = $this->resolveList($node->children);
+
+            return $children === $node->children ? $node : new RowElement($children, $node->style);
+        }
+
+        if ($node instanceof GridElement) {
+            $children = $this->resolveList($node->children);
+
+            return $children === $node->children ? $node : new GridElement($node->columns, $children, $node->style);
+        }
+
+        if ($node instanceof PanelElement) {
+            $child = $this->resolve($node->child);
+
+            return $child === $node->child ? $node : new PanelElement($node->title, $child, $node->style);
+        }
+
+        if ($node instanceof StatusLineElement) {
+            $sections = $this->resolveList($node->sections);
+
+            return $sections === $node->sections ? $node : new StatusLineElement($sections, $node->style);
+        }
+
+        return $node;
     }
 
     private static function slotKey(int $owner, int $slot): string
@@ -424,5 +477,49 @@ final class MountSystem
         }
 
         $this->mounted = $remaining;
+    }
+
+    /** @param array<int, true> $visited */
+    private function hasDirtySlotsForOwner(int $owner, array &$visited): bool
+    {
+        $prefix = $owner . ':';
+
+        foreach ($this->slots as $key => $mounted) {
+            if (!str_starts_with($key, $prefix) || $mounted->isDisposed) {
+                continue;
+            }
+
+            if ($mounted->isDirty) {
+                return true;
+            }
+
+            $mountedId = spl_object_id($mounted);
+            if (isset($visited[$mountedId])) {
+                continue;
+            }
+
+            $visited[$mountedId] = true;
+
+            if ($this->hasDirtySlotsForOwner($mountedId, $visited)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param list<Renderable> $nodes
+     * @return list<Renderable>
+     */
+    private function resolveList(array $nodes): array
+    {
+        $resolved = [];
+
+        foreach ($nodes as $node) {
+            $resolved[] = $this->resolve($node);
+        }
+
+        return $resolved;
     }
 }

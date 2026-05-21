@@ -40,6 +40,10 @@ use Phalanx\Theatron\Text\Span;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
+use function Phalanx\Theatron\Ui\column;
+use function Phalanx\Theatron\Ui\mount;
+use function Phalanx\Theatron\Ui\panel;
+
 final class PainterTest extends TestCase
 {
     #[Test]
@@ -552,8 +556,155 @@ final class PainterTest extends TestCase
         self::assertNotSame(' ', $buf->get(4, 0)->char);
     }
 
+    #[Test]
+    public function panelMountElementResolvesAndPaintsThroughRenderContext(): void
+    {
+        $scope = $this->createStub(\Phalanx\Scope\Scope::class);
+        $mountSystem = new MountSystem($scope);
+        $renderCtx = new RenderContext($scope, new Ui(), Theme::default(), $mountSystem);
+        $buf = Buffer::empty(20, 5);
+        $paintCtx = new PaintContext(Rect::sized(20, 5), $buf, renderContext: $renderCtx);
+
+        Painter::paint(panel('Title', mount(PainterMountChildComponent::class)), $paintCtx);
+
+        self::assertSame('M', $buf->get(1, 1)->char);
+        self::assertCount(1, $mountSystem->mounted());
+    }
+
+    #[Test]
+    public function mountElementPaintUsesStablePaintFrame(): void
+    {
+        $scope = $this->createStub(\Phalanx\Scope\Scope::class);
+        $mountSystem = new MountSystem($scope);
+        $renderCtx = new RenderContext($scope, new Ui(), Theme::default(), $mountSystem);
+        $owner = new \stdClass();
+        $buf = Buffer::empty(20, 5);
+        $renderable = panel('Title', mount(PainterMountChildComponent::class));
+
+        Painter::paint(
+            $renderable,
+            new PaintContext(Rect::sized(20, 5), $buf, renderContext: $renderCtx, mountOwner: $owner),
+        );
+        $first = $mountSystem->mounted()[0];
+
+        Painter::paint(
+            $renderable,
+            new PaintContext(Rect::sized(20, 5), $buf, renderContext: $renderCtx, mountOwner: $owner),
+        );
+
+        self::assertSame($first, $mountSystem->mounted()[0]);
+        self::assertCount(1, $mountSystem->mounted());
+    }
+
+    #[Test]
+    public function paintFrameTracksMultipleMountSlots(): void
+    {
+        $scope = $this->createStub(\Phalanx\Scope\Scope::class);
+        $mountSystem = new MountSystem($scope);
+        $renderCtx = new RenderContext($scope, new Ui(), Theme::default(), $mountSystem);
+        $buf = Buffer::empty(20, 5);
+        $paintCtx = new PaintContext(Rect::sized(20, 5), $buf, renderContext: $renderCtx);
+        $renderable = column(
+            mount(PainterMountChildComponent::class),
+            mount(PainterMountChildComponent::class),
+        );
+
+        Painter::paint($renderable, $paintCtx);
+
+        self::assertCount(2, $mountSystem->mounted());
+    }
+
+    #[Test]
+    public function paintFrameDisposesUnusedMountSlots(): void
+    {
+        $scope = $this->createStub(\Phalanx\Scope\Scope::class);
+        $mountSystem = new MountSystem($scope);
+        $renderCtx = new RenderContext($scope, new Ui(), Theme::default(), $mountSystem);
+        $owner = new \stdClass();
+        $buf = Buffer::empty(20, 5);
+
+        Painter::paint(
+            column(
+                mount(PainterMountChildComponent::class),
+                mount(PainterMountChildComponent::class),
+            ),
+            new PaintContext(Rect::sized(20, 5), $buf, renderContext: $renderCtx, mountOwner: $owner),
+        );
+        $unused = $mountSystem->mounted()[1];
+
+        Painter::paint(
+            column(mount(PainterMountChildComponent::class)),
+            new PaintContext(Rect::sized(20, 5), $buf, renderContext: $renderCtx, mountOwner: $owner),
+        );
+
+        self::assertTrue($unused->isDisposed);
+        self::assertCount(1, $mountSystem->mounted());
+    }
+
+    #[Test]
+    public function paintFrameReplacesMountWhenPropsChange(): void
+    {
+        $scope = $this->createStub(\Phalanx\Scope\Scope::class);
+        $mountSystem = new MountSystem($scope);
+        $renderCtx = new RenderContext($scope, new Ui(), Theme::default(), $mountSystem);
+        $owner = new \stdClass();
+        $buf = Buffer::empty(20, 5);
+
+        Painter::paint(
+            panel('Title', mount(PainterLabelMountChildComponent::class, label: 'first')),
+            new PaintContext(Rect::sized(20, 5), $buf, renderContext: $renderCtx, mountOwner: $owner),
+        );
+        $first = $mountSystem->mounted()[0];
+
+        Painter::paint(
+            panel('Title', mount(PainterLabelMountChildComponent::class, label: 'second')),
+            new PaintContext(Rect::sized(20, 5), $buf, renderContext: $renderCtx, mountOwner: $owner),
+        );
+        $second = $mountSystem->mounted()[0];
+
+        self::assertNotSame($first, $second);
+        self::assertTrue($first->isDisposed);
+        self::assertFalse($second->isDisposed);
+        self::assertCount(1, $mountSystem->mounted());
+    }
+
+    #[Test]
+    public function mountElementWithoutRenderContextIsRejected(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Mount elements require a render context.');
+
+        $buf = Buffer::empty(20, 5);
+
+        Painter::paint(
+            mount(PainterMountChildComponent::class),
+            new PaintContext(Rect::sized(20, 5), $buf),
+        );
+    }
+
     protected function tearDown(): void
     {
         Painter::reset();
+    }
+}
+
+final class PainterMountChildComponent implements Component
+{
+    public function __invoke(RenderContext $ctx): Renderable
+    {
+        return $ctx->ui->text('Mounted');
+    }
+}
+
+final class PainterLabelMountChildComponent implements Component
+{
+    public function __construct(
+        private string $label,
+    ) {
+    }
+
+    public function __invoke(RenderContext $ctx): Renderable
+    {
+        return $ctx->ui->text($this->label);
     }
 }

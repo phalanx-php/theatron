@@ -80,7 +80,7 @@ final class MountedScreen
             $frame = Tracker::push();
             $popped = false;
             try {
-                $result = ($this->screen)($ctx);
+                $result = $ctx->mountSystem->resolve(($this->screen)($ctx));
                 $deps = Tracker::pop($frame);
                 $popped = true;
             } catch (Throwable $e) {

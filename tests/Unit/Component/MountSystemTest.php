@@ -12,15 +12,24 @@ use Phalanx\Theatron\Context\ScreenContext;
 use Phalanx\Theatron\Contract\Component;
 use Phalanx\Theatron\Contract\Mountable;
 use Phalanx\Theatron\Contract\Screen;
+use Phalanx\Theatron\Layout\Size;
 use Phalanx\Theatron\Navigation\Navigator;
 use Phalanx\Theatron\Reactive\Signal;
 use Phalanx\Theatron\Reactive\SignalRegistry;
 use Phalanx\Theatron\Styling\Theme;
+use Phalanx\Theatron\Tdom\Element\GridElement;
+use Phalanx\Theatron\Tdom\Element\RowElement;
+use Phalanx\Theatron\Tdom\Element\StatusLineElement;
 use Phalanx\Theatron\Tdom\Element\TextElement;
 use Phalanx\Theatron\Tdom\Renderable;
+use Phalanx\Theatron\Tdom\Style;
 use Phalanx\Theatron\Tdom\Ui;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+
+use function Phalanx\Theatron\Ui\column;
+use function Phalanx\Theatron\Ui\mount;
+use function Phalanx\Theatron\Ui\row;
 
 final class MountSystemTest extends TestCase
 {
@@ -646,6 +655,161 @@ final class MountSystemTest extends TestCase
         self::assertSame('scope', $result->content);
     }
 
+    #[Test]
+    public function functionMountReusesChildForStableParentRender(): void
+    {
+        $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
+        $model = new \stdClass();
+        $model->parentSignal = new Signal('parent');
+        $model->childSignal = new Signal('child');
+        $parent = $this->mountParent(new FunctionSlotParentComponent($model), $system);
+        $ctx = $this->renderContext($system);
+
+        $parent->render($ctx);
+        $first = $system->mounted()[0];
+        $first->render($ctx);
+
+        $model->parentSignal->set('parent changed');
+        $parent->render($ctx);
+
+        self::assertSame($first, $system->mounted()[0]);
+        self::assertCount(1, $system->mounted());
+        self::assertFalse($first->isDisposed);
+    }
+
+    #[Test]
+    public function functionMountChangedPropsRemountChild(): void
+    {
+        $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
+        $model = new \stdClass();
+        $model->label = new Signal('first');
+        $parent = $this->mountParent(new FunctionLabelSlotParentComponent($model), $system);
+        $ctx = $this->renderContext($system);
+
+        $parent->render($ctx);
+        $first = $system->mounted()[0];
+
+        $model->label->set('second');
+        $parent->render($ctx);
+        $second = $system->mounted()[0];
+
+        self::assertNotSame($first, $second);
+        self::assertTrue($first->isDisposed);
+        self::assertFalse($second->isDisposed);
+        self::assertCount(1, $system->mounted());
+    }
+
+    #[Test]
+    public function functionMountChildSignalDirtiesOnlyChild(): void
+    {
+        $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
+        $model = new \stdClass();
+        $model->parentSignal = new Signal('parent');
+        $model->childSignal = new Signal('child');
+        $parent = $this->mountParent(new FunctionSlotParentComponent($model), $system);
+        $ctx = $this->renderContext($system);
+
+        $parent->render($ctx);
+        $child = $system->mounted()[0];
+        $child->render($ctx);
+        self::assertFalse($parent->isDirty);
+        self::assertFalse($child->isDirty);
+
+        $model->childSignal->set('child changed');
+
+        self::assertFalse($parent->isDirty);
+        self::assertTrue($child->isDirty);
+    }
+
+    #[Test]
+    public function functionMountParentSignalDirtiesOnlyParent(): void
+    {
+        $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
+        $model = new \stdClass();
+        $model->parentSignal = new Signal('parent');
+        $model->childSignal = new Signal('child');
+        $parent = $this->mountParent(new FunctionSlotParentComponent($model), $system);
+        $ctx = $this->renderContext($system);
+
+        $parent->render($ctx);
+        $child = $system->mounted()[0];
+        $child->render($ctx);
+        self::assertFalse($parent->isDirty);
+        self::assertFalse($child->isDirty);
+
+        $model->parentSignal->set('parent changed');
+
+        self::assertTrue($parent->isDirty);
+        self::assertFalse($child->isDirty);
+    }
+
+    #[Test]
+    public function functionMountDirtyDescendantIsVisibleFromOwner(): void
+    {
+        $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
+        $model = new \stdClass();
+        $model->label = new Signal('nested');
+        $model->childSignal = new Signal('child');
+        $parent = $this->mountParent(new NestedParentSlotComponent($model), $system);
+        $ctx = $this->renderContext($system);
+
+        $parent->render($ctx);
+        $nestedParent = $system->mounted()[0];
+        $nestedParent->render($ctx);
+        $descendant = $system->mounted()[1];
+        $descendant->render($ctx);
+        self::assertFalse($system->hasDirtyOwnedSlots($parent));
+
+        $model->childSignal->set('child changed');
+
+        self::assertTrue($system->hasDirtyOwnedSlots($parent));
+        self::assertTrue($system->hasDirtyOwnedSlots($nestedParent));
+    }
+
+    #[Test]
+    public function resolvePreservesRowMetadataWhileSubstitutingMounts(): void
+    {
+        $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
+        $style = Style::empty();
+        $row = row(mount(SimpleTestComponent::class))->styled($style);
+
+        $resolved = $system->resolve($row);
+
+        self::assertInstanceOf(RowElement::class, $resolved);
+        self::assertSame($style, $resolved->style);
+        self::assertInstanceOf(MountedComponent::class, $resolved->children[0]);
+    }
+
+    #[Test]
+    public function resolvePreservesGridMetadataWhileSubstitutingMounts(): void
+    {
+        $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
+        $style = Style::empty();
+        $columns = [Size::fixed(4)];
+        $grid = new GridElement($columns, [mount(SimpleTestComponent::class)], $style);
+
+        $resolved = $system->resolve($grid);
+
+        self::assertInstanceOf(GridElement::class, $resolved);
+        self::assertSame($style, $resolved->style);
+        self::assertSame($columns, $resolved->columns);
+        self::assertInstanceOf(MountedComponent::class, $resolved->children[0]);
+    }
+
+    #[Test]
+    public function resolvePreservesStatusLineMetadataWhileSubstitutingMounts(): void
+    {
+        $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
+        $style = Style::empty();
+        $status = new StatusLineElement([mount(SimpleTestComponent::class)], $style);
+
+        $resolved = $system->resolve($status);
+
+        self::assertInstanceOf(StatusLineElement::class, $resolved);
+        self::assertSame($style, $resolved->style);
+        self::assertInstanceOf(MountedComponent::class, $resolved->sections[0]);
+    }
+
     private function renderContext(MountSystem $system): RenderContext
     {
         return new RenderContext(
@@ -988,6 +1152,38 @@ final class NestedChildSlotComponent implements Component
         return $ctx->ui->column(
             $ctx->ui->text($this->label),
             $ctx->mount(SlotChildComponent::class, input: $this->model->childSignal),
+        );
+    }
+}
+
+final class FunctionSlotParentComponent implements Component
+{
+    public function __construct(
+        private \stdClass $model,
+    ) {
+    }
+
+    public function __invoke(RenderContext $ctx): Renderable
+    {
+        $this->model->parentSignal->get();
+
+        return column(
+            mount(SlotChildComponent::class, input: $this->model->childSignal),
+        );
+    }
+}
+
+final class FunctionLabelSlotParentComponent implements Component
+{
+    public function __construct(
+        private \stdClass $model,
+    ) {
+    }
+
+    public function __invoke(RenderContext $ctx): Renderable
+    {
+        return column(
+            mount(LabelSlotChildComponent::class, label: (string) $this->model->label->get()),
         );
     }
 }

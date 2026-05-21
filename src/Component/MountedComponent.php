@@ -106,7 +106,7 @@ final class MountedComponent implements Renderable
             $frame = Tracker::push();
             $popped = false;
             try {
-                $result = ($this->component)($ctx);
+                $result = $ctx->mountSystem->resolve(($this->component)($ctx));
                 $deps = Tracker::pop($frame);
                 $popped = true;
             } catch (Throwable $e) {

@@ -8,7 +8,10 @@ use Phalanx\Cancellation\Cancelled;
 use Phalanx\Scope\ExecutionScope;
 use Phalanx\Theatron\Binding\Binding;
 use Phalanx\Theatron\Binding\BindingRegistry;
+use Phalanx\Theatron\Buffer\Buffer;
+use Phalanx\Theatron\Buffer\Rect;
 use Phalanx\Theatron\Component\MountSystem;
+use Phalanx\Theatron\Context\RenderContext;
 use Phalanx\Theatron\Context\ScreenContext;
 use Phalanx\Theatron\Contract\HasFocusables;
 use Phalanx\Theatron\Contract\HasStatusBar;
@@ -22,11 +25,13 @@ use Phalanx\Theatron\Input\ModeDispatcher;
 use Phalanx\Theatron\Kit\ScreenLayout;
 use Phalanx\Theatron\Navigation\WorkspaceNavigator;
 use Phalanx\Theatron\Reactive\SignalRegistry;
+use Phalanx\Theatron\Rendering\Region;
 use Phalanx\Theatron\Stage\Stage;
 use Phalanx\Theatron\State\Store;
 use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Painter\PaintContext;
 use Phalanx\Theatron\Tdom\Painter\Painter;
+use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Tdom\Ui;
 
 final class TheatronApp
@@ -72,6 +77,8 @@ final class TheatronApp
 
         $ui = new Ui($this->theme);
         $screenCtx = new ScreenContext($scope, $ui, $this->theme, $navigator, $mountSystem);
+        $renderCtx = new RenderContext($scope, $ui, $this->theme, $mountSystem, $registry);
+        $statusMountOwner = new \stdClass();
 
         $layout = ScreenLayout::mainWithStatusBar();
         $layout->attach($this->stage);
@@ -90,25 +97,36 @@ final class TheatronApp
 
         self::rebuildFocus($focus, $navigator);
 
-        $this->stage->onDraw(static function () use ($navigator, $layout, $screenCtx): void {
+        $this->stage->onDraw(static function () use (
+            $mountSystem,
+            $navigator,
+            $layout,
+            $screenCtx,
+            $renderCtx,
+            $statusMountOwner,
+        ): void {
             $workspace = $navigator->activeWorkspace();
+            $statusIsDirty = $mountSystem->hasDirtyOwnedSlots($statusMountOwner);
 
-            if (!$workspace->isDirty) {
+            if (!$workspace->isDirty && !$mountSystem->hasDirtyOwnedSlots($workspace) && !$statusIsDirty) {
                 return;
             }
 
             $mainRegion = $layout->region('main');
-            $renderable = $workspace->render($screenCtx);
-            $mainRegion->buffer()->clear();
-            Painter::paint($renderable, new PaintContext($mainRegion->area, $mainRegion->buffer()));
-            $mainRegion->markDirty();
+            $renderable = $workspace->isDirty || $workspace->lastResult() === null
+                ? $workspace->render($screenCtx)
+                : $workspace->lastResult();
+
+            self::paintRegion($renderable, $mainRegion, $renderCtx, $workspace);
 
             $statusRegion = $layout->region('status');
             $screen = $workspace->screen;
             if ($screen instanceof HasStatusBar) {
                 $statusRenderable = $screen->statusBar($screenCtx->ui);
+                self::paintRegion($statusRenderable, $statusRegion, $renderCtx, $statusMountOwner);
+            } else {
+                $mountSystem->disposeOwnedSlots($statusMountOwner);
                 $statusRegion->buffer()->clear();
-                Painter::paint($statusRenderable, new PaintContext($statusRegion->area, $statusRegion->buffer()));
                 $statusRegion->markDirty();
             }
         });
@@ -201,5 +219,28 @@ final class TheatronApp
                 $focus->register($name, $focusable);
             }
         }
+    }
+
+    private static function paintRegion(
+        Renderable $renderable,
+        Region $region,
+        RenderContext $renderCtx,
+        object $mountOwner,
+    ): void {
+        $scratch = Buffer::empty($region->area->width, $region->area->height);
+
+        Painter::paint(
+            $renderable,
+            new PaintContext(
+                Rect::sized($region->area->width, $region->area->height),
+                $scratch,
+                renderContext: $renderCtx,
+                mountOwner: $mountOwner,
+            ),
+        );
+
+        $region->buffer()->clear();
+        $region->buffer()->blitFull($scratch, 0, 0);
+        $region->markDirty();
     }
 }

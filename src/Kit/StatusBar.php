@@ -6,6 +6,7 @@ namespace Phalanx\Theatron\Kit;
 
 use Phalanx\Theatron\Layout\Size;
 use Phalanx\Theatron\Style\Color;
+use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Element\StatusLineElement;
 use Phalanx\Theatron\Tdom\Style;
 use Phalanx\Theatron\Tdom\Ui;
@@ -16,15 +17,19 @@ final class StatusBar
     private array $sections = [];
 
     private Color $background;
+    private Color $defaultTextColor;
 
-    public function __construct(?Color $background = null)
+    public function __construct(?Color $background = null, ?Theme $theme = null)
     {
-        $this->background = $background ?? Color::indexed(236);
+        $this->background = $background ?? ($theme !== null ? $theme->bg : Color::indexed(236));
+        $this->defaultTextColor = $theme !== null
+            ? ($theme->bright->foreground ?? Color::brightWhite())
+            : Color::brightWhite();
     }
 
-    public static function new(?Color $background = null): self
+    public static function new(?Color $background = null, ?Theme $theme = null): self
     {
-        return new self($background);
+        return new self($background, $theme);
     }
 
     public function section(string $text, ?Color $color = null, bool $fill = false): self
@@ -53,7 +58,7 @@ final class StatusBar
                 $section->text,
                 style: Style::of(
                     size: $section->fill ? Size::fill() : null,
-                    color: $section->color ?? Color::brightWhite(),
+                    color: $section->color ?? $this->defaultTextColor,
                     background: $this->background,
                 ),
             );

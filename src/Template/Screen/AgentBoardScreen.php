@@ -15,7 +15,7 @@ use Phalanx\Theatron\Input\NormalModeHandler;
 use Phalanx\Theatron\Kit\StatusBar;
 use Phalanx\Theatron\Layout\Border;
 use Phalanx\Theatron\Style\Color;
-use Phalanx\Theatron\Style\Style;
+use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Tdom\Style as TdomStyle;
 use Phalanx\Theatron\Tdom\Ui;
@@ -46,7 +46,7 @@ class AgentBoardScreen implements Screen, HasStatusBar, HasFocusables, NormalMod
         $agents = $this->store->agents;
 
         return $ctx->ui->column(
-            self::renderAgentCards($ctx->ui, $agents, $this->selectedIndex),
+            self::renderAgentCards($ctx->ui, $ctx->theme, $agents, $this->selectedIndex),
         );
     }
 
@@ -91,19 +91,22 @@ class AgentBoardScreen implements Screen, HasStatusBar, HasFocusables, NormalMod
         return false;
     }
 
-    // ---- private render helpers ----
-
-    private static function renderAgentCards(Ui $ui, AgentRegistrySlice $agents, int $selectedIndex): Renderable
-    {
+    private static function renderAgentCards(
+        Ui $ui,
+        Theme $theme,
+        AgentRegistrySlice $agents,
+        int $selectedIndex,
+    ): Renderable {
         if ($agents->agents === []) {
             return $ui->text(
-                Line::from(Span::styled('No agents registered', Style::new()->fg(Color::indexed(242)))),
+                Line::from(Span::styled('No agents registered', $theme->muted)),
             );
         }
 
         $cards = array_map(
             static fn (AgentSummary $agent, int $i) => self::renderAgentCard(
                 $ui,
+                $theme,
                 $agent,
                 $agents->activeAgentId,
                 $i === $selectedIndex,
@@ -117,6 +120,7 @@ class AgentBoardScreen implements Screen, HasStatusBar, HasFocusables, NormalMod
 
     private static function renderAgentCard(
         Ui $ui,
+        Theme $theme,
         AgentSummary $agent,
         ?string $activeAgentId,
         bool $selected,
@@ -124,44 +128,40 @@ class AgentBoardScreen implements Screen, HasStatusBar, HasFocusables, NormalMod
         $isActive = $agent->id === $activeAgentId;
 
         $borderColor = match (true) {
-            $isActive => Color::brightCyan(),
+            $isActive => $theme->accent->foreground ?? $theme->border,
             $selected => Color::brightYellow(),
-            default => Color::indexed(240),
+            default => $theme->border,
         };
 
         $panelStyle = TdomStyle::of(border: Border::Rounded, color: $borderColor);
 
         $lines = [];
 
-        // Agent name — bold, colored by active state
         $nameStyle = $isActive
-            ? Style::new()->fg(Color::brightCyan())->bold()
-            : Style::new()->fg(Color::brightWhite())->bold();
+            ? $theme->accent->bold()
+            : $theme->bright;
         $lines[] = $ui->text(Line::from(Span::styled($agent->name, $nameStyle)));
 
-        // ID — dim
-        $lines[] = $ui->text(Line::from(Span::styled($agent->id, Style::new()->fg(Color::indexed(242)))));
+        $lines[] = $ui->text(Line::from(Span::styled($agent->id, $theme->muted)));
 
-        // Capabilities
         if ($agent->capabilities !== []) {
             $lines[] = $ui->text(
-                Line::from(Span::styled('Capabilities:', Style::new()->fg(Color::indexed(250)))),
+                Line::from(Span::styled('Capabilities:', $theme->subtle)),
             );
 
             foreach ($agent->capabilities as $capability) {
                 $lines[] = $ui->text(
                     Line::from(
-                        Span::styled('  • ', Style::new()->fg(Color::indexed(244))),
-                        Span::styled($capability, Style::new()->fg(Color::brightWhite())),
+                        Span::styled('  • ', $theme->hint),
+                        Span::styled($capability, $theme->bright),
                     ),
                 );
             }
         }
 
-        // Active badge
         if ($isActive) {
             $lines[] = $ui->text(
-                Line::from(Span::styled('Active', Style::new()->fg(Color::brightCyan())->bold())),
+                Line::from(Span::styled('Active', $theme->accent->bold())),
             );
         }
 

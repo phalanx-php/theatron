@@ -107,7 +107,7 @@ final class MountedComponentTest extends TestCase
 
             public function __invoke(RenderContext $ctx): Renderable
             {
-                $val = $this->data->value;
+                $val = $this->data->get();
 
                 return $ctx->ui->text((string) $val);
             }
@@ -135,7 +135,7 @@ final class MountedComponentTest extends TestCase
 
             public function __invoke(RenderContext $ctx): Renderable
             {
-                return $ctx->ui->text((string) $this->count->value);
+                return $ctx->ui->text((string) $this->count->get());
             }
         };
 
@@ -146,7 +146,7 @@ final class MountedComponentTest extends TestCase
         $mounted->render($this->createRenderCtx());
         self::assertFalse($mounted->isDirty);
 
-        $component->count->value = 42;
+        $component->count->set(42);
 
         self::assertTrue($mounted->isDirty);
     }
@@ -222,7 +222,7 @@ final class MountedComponentTest extends TestCase
 
             public function __invoke(RenderContext $ctx): Renderable
             {
-                return $ctx->ui->text((string) $this->input->value);
+                return $ctx->ui->text((string) $this->input->get());
             }
         };
 
@@ -413,7 +413,7 @@ final class MountedComponentTest extends TestCase
 
             public function __invoke(RenderContext $ctx): Renderable
             {
-                return $ctx->ui->text((string) $this->external->value);
+                return $ctx->ui->text((string) $this->external->get());
             }
         };
 

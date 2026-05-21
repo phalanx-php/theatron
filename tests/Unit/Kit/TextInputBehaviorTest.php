@@ -20,7 +20,7 @@ final class TextInputBehaviorTest extends TestCase
 
         self::assertTrue($handled);
         self::assertNotNull($fixture->signal());
-        self::assertSame('a', $fixture->signal()->value);
+        self::assertSame('a', $fixture->signal()->get());
     }
 
     #[Test]
@@ -31,7 +31,7 @@ final class TextInputBehaviorTest extends TestCase
 
         self::assertTrue($handled);
         self::assertNotNull($fixture->signal());
-        self::assertSame('hell', $fixture->signal()->value);
+        self::assertSame('hell', $fixture->signal()->get());
     }
 
     #[Test]
@@ -59,7 +59,7 @@ final class TextInputBehaviorTest extends TestCase
 
         self::assertTrue($handled);
         self::assertNotNull($fixture->signal());
-        self::assertSame('', $fixture->signal()->value);
+        self::assertSame('', $fixture->signal()->get());
     }
 
     #[Test]
@@ -70,7 +70,7 @@ final class TextInputBehaviorTest extends TestCase
 
         self::assertTrue($handled);
         self::assertNotNull($fixture->signal());
-        self::assertSame('hello ', $fixture->signal()->value);
+        self::assertSame('hello ', $fixture->signal()->get());
     }
 
     #[Test]
@@ -81,6 +81,6 @@ final class TextInputBehaviorTest extends TestCase
 
         self::assertTrue($handled);
         self::assertNotNull($fixture->signal());
-        self::assertSame('αβ', $fixture->signal()->value);
+        self::assertSame('αβ', $fixture->signal()->get());
     }
 }

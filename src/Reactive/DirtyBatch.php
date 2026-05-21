@@ -6,8 +6,8 @@ namespace Phalanx\Theatron\Reactive;
 
 final class DirtyBatch
 {
-    private(set) bool $isDirty = false;
     private(set) int $requests = 0;
+    private(set) bool $isDirty = false;
 
     public function request(): void
     {

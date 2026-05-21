@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Phalanx\Theatron\Tests\Unit\Reactive;
 
+use Phalanx\Scope\Scope;
 use Phalanx\Theatron\Reactive\Signal;
 use Phalanx\Theatron\Reactive\Tracker;
 use PHPUnit\Framework\Attributes\Test;
@@ -18,7 +19,7 @@ final class SignalTest extends TestCase
         $signal = new Signal(42);
 
         $frame = Tracker::push();
-        $read = $signal->value;
+        $read = $signal->get();
         $deps = Tracker::pop($frame);
 
         self::assertSame(42, $read);
@@ -27,7 +28,7 @@ final class SignalTest extends TestCase
     }
 
     #[Test]
-    public function writeNotifiesSubscribers(): void
+    public function setNotifiesSubscribers(): void
     {
         $signal = new Signal(1);
         $calls = 0;
@@ -36,7 +37,7 @@ final class SignalTest extends TestCase
             $calls++;
         });
 
-        $signal->value = 2;
+        $signal->set(2);
 
         self::assertSame(1, $calls);
     }
@@ -51,7 +52,7 @@ final class SignalTest extends TestCase
             $calls++;
         });
 
-        $signal->value = 'hello';
+        $signal->set('hello');
 
         self::assertSame(0, $calls);
     }
@@ -65,7 +66,7 @@ final class SignalTest extends TestCase
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('Cannot write to a disposed signal.');
 
-        $signal->value = 1;
+        $signal->set(1);
     }
 
     #[Test]
@@ -119,7 +120,7 @@ final class SignalTest extends TestCase
             $b++;
         });
 
-        $signal->value = 1;
+        $signal->set(1);
 
         self::assertSame(1, $a);
         self::assertSame(1, $b);
@@ -141,10 +142,76 @@ final class SignalTest extends TestCase
             $calls++;
         });
 
-        $signal->value = 1;
+        $signal->set(1);
 
         self::assertSame(2, $calls);
         self::assertSame(1, $signal->subscriberCount);
+    }
+
+    #[Test]
+    public function setCanReceiveStaticUpdaterClosure(): void
+    {
+        $signal = new Signal(1);
+        $calls = 0;
+
+        $signal->subscribe(static function () use (&$calls): void {
+            $calls++;
+        });
+
+        $signal->set(static fn(int $current): int => $current + 41);
+
+        self::assertSame(42, $signal->get());
+        self::assertSame(1, $calls);
+    }
+
+    #[Test]
+    public function setPassesScopeToUpdaterWhenProvided(): void
+    {
+        $signal = new Signal('idle');
+        $scope = $this->createStub(Scope::class);
+
+        $signal->set(static fn(string $current, ?Scope $given): string => $given === $scope
+            ? $current . ':scoped'
+            : 'wrong-scope', $scope);
+
+        self::assertSame('idle:scoped', $signal->get());
+    }
+
+    #[Test]
+    public function setStoresNonClosureCallablesAsValues(): void
+    {
+        $signal = new Signal(null);
+
+        $signal->set('strlen');
+
+        self::assertSame('strlen', $signal->get());
+    }
+
+    #[Test]
+    public function setStoresInvokableObjectsAsValues(): void
+    {
+        $signal = new Signal(null);
+        $invokable = new class () {
+            public function __invoke(): string
+            {
+                return 'called';
+            }
+        };
+
+        $signal->set($invokable);
+
+        self::assertSame($invokable, $signal->get());
+    }
+
+    #[Test]
+    public function nonStaticUpdaterClosureThrows(): void
+    {
+        $signal = new Signal(0);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Signal updater closures must be static closures.');
+
+        $signal->set(fn(int $current): int => $current + 1);
     }
 
     #[Test]

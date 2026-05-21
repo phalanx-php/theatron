@@ -44,7 +44,7 @@ final class SignalScannerTest extends TestCase
 
         self::assertFalse($batch->isDirty);
 
-        $component->count->value = 42;
+        $component->count->set(42);
 
         self::assertTrue($batch->isDirty);
         self::assertCount(1, $result->subscriptions);

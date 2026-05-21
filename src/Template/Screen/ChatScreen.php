@@ -16,7 +16,7 @@ use Phalanx\Theatron\Layout\Border;
 use Phalanx\Theatron\Layout\Size;
 use Phalanx\Theatron\Reactive\Signal;
 use Phalanx\Theatron\Style\Color;
-use Phalanx\Theatron\Style\Style;
+use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Tdom\Style as TdomStyle;
 use Phalanx\Theatron\Tdom\Ui;
@@ -62,9 +62,9 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables
         $focusTarget = $inputMode->focusTarget;
 
         return $ctx->ui->column(
-            $this->renderConversation($ctx->ui, $conversation, $focusTarget === 'conversation'),
+            $this->renderConversation($ctx->ui, $ctx->theme, $conversation, $focusTarget === 'conversation'),
             self::renderStreamingIndicator($ctx->ui, $activity),
-            $this->renderInput($ctx->ui, $focusTarget === 'input'),
+            $this->renderInput($ctx->ui, $ctx->theme, $focusTarget === 'input'),
         );
     }
 
@@ -128,7 +128,7 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables
      */
     public function submitInput(): void
     {
-        $text = $this->inputText->value;
+        $text = $this->inputText->get();
 
         if ($text === '') {
             return;
@@ -139,24 +139,22 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables
             static fn(ConversationSlice $s) => $s->addUserMessage($text),
         );
 
-        $this->inputText->value = '';
+        $this->inputText->set('');
     }
 
-    // ---- private render methods ----
-
-    private static function renderMessage(Ui $ui, ConversationMessage $msg): Renderable
+    private static function renderMessage(Ui $ui, Theme $theme, ConversationMessage $msg): Renderable
     {
-        $roleColor = match ($msg->role) {
-            'user' => Style::new()->fg(Color::brightWhite())->bold(),
-            'assistant' => Style::new()->fg(Color::brightCyan()),
-            default => Style::new()->fg(Color::indexed(250)),
+        $roleStyle = match ($msg->role) {
+            'user' => $theme->bright,
+            'assistant' => $theme->accent,
+            default => $theme->subtle,
         };
 
         $roleLabel = $msg->role === 'user' ? 'You' : 'Assistant';
 
         $line = Line::from(
-            Span::styled($roleLabel . ':', $roleColor),
-            Span::styled(' ' . $msg->text, Style::new()->fg(Color::brightWhite())),
+            Span::styled($roleLabel . ':', $roleStyle),
+            Span::styled(' ' . $msg->text, $theme->bright),
         );
 
         return $ui->text($line);
@@ -171,14 +169,18 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables
         return $ui->text('');
     }
 
-    private function renderConversation(Ui $ui, ConversationSlice $conversation, bool $focused): Renderable
-    {
-        $borderColor = $focused ? Color::brightYellow() : Color::indexed(240);
+    private function renderConversation(
+        Ui $ui,
+        Theme $theme,
+        ConversationSlice $conversation,
+        bool $focused,
+    ): Renderable {
+        $borderColor = $focused ? Color::brightYellow() : $theme->border;
         $panelStyle = TdomStyle::of(size: Size::fill(), border: Border::Rounded, color: $borderColor);
 
         if ($conversation->messages === []) {
             $empty = $ui->text(
-                Line::from(Span::styled('No messages yet.', Style::new()->fg(Color::indexed(242)))),
+                Line::from(Span::styled('No messages yet.', $theme->muted)),
             );
 
             return $ui->panel('Conversation', $empty, style: $panelStyle);
@@ -186,22 +188,22 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables
 
         $visible = array_slice($conversation->messages, $this->scrollOffset, self::VISIBLE_ROWS);
         $rows = array_map(
-            static fn(ConversationMessage $msg) => self::renderMessage($ui, $msg),
+            static fn(ConversationMessage $msg) => self::renderMessage($ui, $theme, $msg),
             $visible,
         );
 
         return $ui->panel('Conversation', $ui->column(...$rows), style: $panelStyle);
     }
 
-    private function renderInput(Ui $ui, bool $focused): Renderable
+    private function renderInput(Ui $ui, Theme $theme, bool $focused): Renderable
     {
-        $borderColor = $focused ? Color::brightGreen() : Color::indexed(240);
+        $borderColor = $focused ? ($theme->success->foreground ?? $theme->border) : $theme->border;
         $panelStyle = TdomStyle::of(size: Size::fixed(3), border: Border::Rounded, color: $borderColor);
-        $text = $this->inputText->value;
+        $text = $this->inputText->get();
 
         return $ui->panel(
             'Input',
-            $ui->input(value: $text, prompt: '> ', cursor: mb_strlen($text)),
+            $ui->input(value: $text, prompt: '> ', cursor: mb_strlen((string) $text)),
             style: $panelStyle,
         );
     }

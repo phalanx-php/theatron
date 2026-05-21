@@ -21,7 +21,7 @@ trait TextInputBehavior
         }
 
         if ($event->is(Key::Backspace)) {
-            $signal->value = mb_substr($signal->value, 0, -1);
+            $signal->set(static fn(string $value): string => mb_substr($value, 0, -1));
 
             return true;
         }
@@ -29,7 +29,7 @@ trait TextInputBehavior
         $char = $event->char();
 
         if ($char !== null) {
-            $signal->value .= $char;
+            $signal->set(static fn(string $value): string => $value . $char);
 
             return true;
         }

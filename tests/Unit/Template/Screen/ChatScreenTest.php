@@ -214,7 +214,7 @@ final class ChatScreenTest extends TestCase
         $store = new AppStore();
         $screen = new ChatScreen($store);
 
-        $screen->inputText->value = 'Rally the phalanx at the agora.';
+        $screen->inputText->set('Rally the phalanx at the agora.');
         $screen->submitInput();
 
         $messages = $store->conversation->messages;
@@ -223,7 +223,7 @@ final class ChatScreenTest extends TestCase
         self::assertSame('Rally the phalanx at the agora.', $messages[0]->text);
 
         // Composer must be cleared after submit.
-        self::assertSame('', $screen->inputText->value);
+        self::assertSame('', $screen->inputText->get());
     }
 
     #[Test]
@@ -232,7 +232,7 @@ final class ChatScreenTest extends TestCase
         $store = new AppStore();
         $screen = new ChatScreen($store);
 
-        $screen->inputText->value = '';
+        $screen->inputText->set('');
         $screen->submitInput();
 
         self::assertSame([], $store->conversation->messages);
@@ -250,11 +250,11 @@ final class ChatScreenTest extends TestCase
         $handler->handleInput(new KeyEvent('u'));
         $handler->handleInput(new KeyEvent('s'));
 
-        self::assertSame('Zeus', $screen->inputText->value);
+        self::assertSame('Zeus', $screen->inputText->get());
 
         // Backspace removes last char.
         $handler->handleInput(new KeyEvent(Key::Backspace));
-        self::assertSame('Zeu', $screen->inputText->value);
+        self::assertSame('Zeu', $screen->inputText->get());
     }
 
     #[Test]
@@ -345,14 +345,14 @@ final class ChatScreenTest extends TestCase
         $screen = new ChatScreen($store);
         $handler = new ChatInputHandler($screen);
 
-        $screen->inputText->value = 'Form the phalanx.';
+        $screen->inputText->set('Form the phalanx.');
         $result = $handler->handleInput(new KeyEvent(Key::Enter));
 
         self::assertTrue($result);
         self::assertCount(1, $store->conversation->messages);
         self::assertSame('user', $store->conversation->messages[0]->role);
         self::assertSame('Form the phalanx.', $store->conversation->messages[0]->text);
-        self::assertSame('', $screen->inputText->value);
+        self::assertSame('', $screen->inputText->get());
     }
 
     #[Test]

@@ -7,11 +7,14 @@ namespace Phalanx\Theatron\Tdom\Element;
 use Phalanx\Theatron\Layout\Size;
 use Phalanx\Theatron\Tdom\Element;
 use Phalanx\Theatron\Tdom\ElementType;
+use Phalanx\Theatron\Tdom\HasFluentStyle;
 use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Tdom\Style;
 
 final class GridElement implements Element
 {
+    use HasFluentStyle;
+
     public ElementType $type { get => ElementType::Grid; }
 
     /**

@@ -6,10 +6,13 @@ namespace Phalanx\Theatron\Tdom\Element;
 
 use Phalanx\Theatron\Tdom\Element;
 use Phalanx\Theatron\Tdom\ElementType;
+use Phalanx\Theatron\Tdom\HasFluentStyle;
 use Phalanx\Theatron\Tdom\Style;
 
 final class ScrollElement implements Element
 {
+    use HasFluentStyle;
+
     public ElementType $type { get => ElementType::Scroll; }
 
     public function __construct(

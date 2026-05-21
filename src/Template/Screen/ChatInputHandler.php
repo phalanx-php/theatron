@@ -29,7 +29,7 @@ final class ChatInputHandler implements Focusable, AcceptsInput
 
     public function handleInput(KeyEvent $event): bool
     {
-        if ($event->is(Key::Enter) && $this->screen->inputText->value !== '') {
+        if ($event->is(Key::Enter) && $this->screen->inputText->get() !== '') {
             $this->screen->submitInput();
 
             return true;

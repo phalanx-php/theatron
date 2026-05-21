@@ -21,7 +21,7 @@ final class ComputedTest extends TestCase
 
         $computed = new Computed(static function () use ($sig, &$evals): int {
             $evals++;
-            return $sig->value * 2;
+            return $sig->get() * 2;
         });
 
         self::assertSame(0, $evals);
@@ -39,14 +39,14 @@ final class ComputedTest extends TestCase
 
         $computed = new Computed(static function () use ($sig, &$evals): int {
             $evals++;
-            return $sig->value + 1;
+            return $sig->get() + 1;
         });
 
         $_ = $computed->value;
         $_ = $computed->value;
         self::assertSame(1, $evals);
 
-        $sig->value = 10;
+        $sig->set(10);
         $_ = $computed->value;
         self::assertSame(2, $evals);
     }
@@ -55,11 +55,11 @@ final class ComputedTest extends TestCase
     public function autoRecomputesOnDepChange(): void
     {
         $sig = new Signal(2);
-        $computed = new Computed(static fn(): int => $sig->value * 3);
+        $computed = new Computed(static fn(): int => $sig->get() * 3);
 
         self::assertSame(6, $computed->value);
 
-        $sig->value = 4;
+        $sig->set(4);
         self::assertSame(12, $computed->value);
     }
 
@@ -86,7 +86,7 @@ final class ComputedTest extends TestCase
 
         $computed = new Computed(static function () use ($sig, &$evals): int {
             $evals++;
-            return $sig->value;
+            return $sig->get();
         });
 
         $_ = $computed->value;
@@ -95,7 +95,7 @@ final class ComputedTest extends TestCase
         $computed->dispose();
         self::assertTrue($computed->isDisposed);
 
-        $sig->value = 2;
+        $sig->set(2);
         self::assertSame(1, $evals);
     }
 
@@ -114,14 +114,14 @@ final class ComputedTest extends TestCase
         $sig = new Signal(1);
         $notified = 0;
 
-        $computed = new Computed(static fn(): int => $sig->value + 10);
+        $computed = new Computed(static fn(): int => $sig->get() + 10);
         $_ = $computed->value;
 
         $computed->subscribe(static function () use (&$notified): void {
             $notified++;
         });
 
-        $sig->value = 5;
+        $sig->set(5);
         self::assertSame(1, $notified);
     }
 
@@ -129,12 +129,12 @@ final class ComputedTest extends TestCase
     public function chainedDependencyRecomputes(): void
     {
         $sig = new Signal(2);
-        $b = new Computed(static fn(): int => $sig->value * 3);
+        $b = new Computed(static fn(): int => $sig->get() * 3);
         $c = new Computed(static fn(): int => $b->value + 10);
 
         self::assertSame(16, $c->value);
 
-        $sig->value = 5;
+        $sig->set(5);
         self::assertSame(25, $c->value);
     }
 
@@ -142,7 +142,7 @@ final class ComputedTest extends TestCase
     public function disposalCleansUpSubscribers(): void
     {
         $sig = new Signal(1);
-        $computed = new Computed(static fn(): int => $sig->value);
+        $computed = new Computed(static fn(): int => $sig->get());
 
         $notified = 0;
         $computed->subscribe(static function () use (&$notified): void {
@@ -154,7 +154,7 @@ final class ComputedTest extends TestCase
         $computed->dispose();
         self::assertSame(0, $computed->subscriberCount);
 
-        $sig->value = 2;
+        $sig->set(2);
         self::assertSame(0, $notified);
     }
 

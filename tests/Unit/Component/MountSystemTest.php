@@ -310,7 +310,7 @@ final class SignalTestComponent implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text((string) $this->count->value);
+        return $ctx->ui->text((string) $this->count->get());
     }
 }
 
@@ -324,7 +324,7 @@ final class BorrowingComponent implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text((string) $this->input->value);
+        return $ctx->ui->text((string) $this->input->get());
     }
 }
 
@@ -387,7 +387,7 @@ final class SignalHoldingComponent implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text((string) $this->counter->value);
+        return $ctx->ui->text((string) $this->counter->get());
     }
 }
 
@@ -400,6 +400,6 @@ final class BorrowedOnlyComponent implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text((string) $this->input->value);
+        return $ctx->ui->text((string) $this->input->get());
     }
 }

@@ -20,13 +20,13 @@ final class WatchTest extends TestCase
         $fired = 0;
 
         $watch = new Watch(
-            static fn(): int => $sig->value,
+            static fn(): int => $sig->get(),
             static function () use (&$fired): void {
                 $fired++;
             },
         );
 
-        $sig->value = 2;
+        $sig->set(2);
         self::assertSame(1, $fired);
 
         unset($watch);
@@ -40,14 +40,14 @@ final class WatchTest extends TestCase
         $capturedOld = null;
 
         $watch = new Watch(
-            static fn(): int => $sig->value,
+            static fn(): int => $sig->get(),
             static function (mixed $new, mixed $old) use (&$capturedNew, &$capturedOld): void {
                 $capturedNew = $new;
                 $capturedOld = $old;
             },
         );
 
-        $sig->value = 20;
+        $sig->set(20);
 
         self::assertSame(20, $capturedNew);
         self::assertSame(10, $capturedOld);
@@ -62,13 +62,13 @@ final class WatchTest extends TestCase
         $fired = 0;
 
         new Watch(
-            static fn(): int => $sig->value,
+            static fn(): int => $sig->get(),
             static function () use (&$fired): void {
                 $fired++;
             },
         );
 
-        $sig->value = 5;
+        $sig->set(5);
         self::assertSame(0, $fired);
     }
 
@@ -79,14 +79,14 @@ final class WatchTest extends TestCase
         $fired = 0;
 
         $watch = new Watch(
-            static fn(): int => $sig->value,
+            static fn(): int => $sig->get(),
             static function () use (&$fired): void {
                 $fired++;
             },
         );
 
         $watch->dispose();
-        $sig->value = 2;
+        $sig->set(2);
 
         self::assertSame(0, $fired);
     }
@@ -98,14 +98,14 @@ final class WatchTest extends TestCase
         $effectCount = 0;
 
         $watch = new Watch(
-            static fn(): int => $sig->value,
+            static fn(): int => $sig->get(),
             static function (mixed $new) use ($sig, &$effectCount): void {
                 $effectCount++;
-                $sig->value = $new + 100;
+                $sig->set($new + 100);
             },
         );
 
-        $sig->value = 2;
+        $sig->set(2);
 
         self::assertSame(1, $effectCount);
 

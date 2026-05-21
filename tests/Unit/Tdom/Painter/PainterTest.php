@@ -17,6 +17,7 @@ use Phalanx\Theatron\Layout\Size;
 use Phalanx\Theatron\Reactive\DirtyBatch;
 use Phalanx\Theatron\Style\Color;
 use Phalanx\Theatron\Style\Modifier;
+use Phalanx\Theatron\Style\Style as AnsiStyle;
 use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Element\ColumnElement;
 use Phalanx\Theatron\Tdom\Element\DividerElement;
@@ -34,6 +35,8 @@ use Phalanx\Theatron\Tdom\Painter\Painter;
 use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Tdom\Style;
 use Phalanx\Theatron\Tdom\Ui;
+use Phalanx\Theatron\Text\Line;
+use Phalanx\Theatron\Text\Span;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -444,6 +447,109 @@ final class PainterTest extends TestCase
         Painter::paint($mounted, $paintCtx);
 
         self::assertSame(' ', $buf->get(0, 0)->char, 'Disposed component with null lastResult must not crash');
+    }
+
+    #[Test]
+    public function panelPaintsLineTitleIntoBuffer(): void
+    {
+        $buf = Buffer::empty(20, 5);
+        $ctx = new PaintContext(Rect::sized(20, 5), $buf);
+
+        $title = Line::from(
+            Span::styled('Zeus', AnsiStyle::new()->fg('#88ccff')),
+        );
+
+        $panel = new PanelElement(
+            $title,
+            new TextElement('inner'),
+            Style::of(border: Border::Single),
+        );
+
+        Painter::paint($panel, $ctx);
+
+        self::assertSame(' ', $buf->get(1, 0)->char);
+        self::assertSame('Z', $buf->get(2, 0)->char);
+        self::assertSame('e', $buf->get(3, 0)->char);
+        self::assertSame('u', $buf->get(4, 0)->char);
+        self::assertSame('s', $buf->get(5, 0)->char);
+    }
+
+    #[Test]
+    public function panelPaintsEmptyWidthLineTitleWithoutGarbage(): void
+    {
+        $buf = Buffer::empty(20, 5);
+        $ctx = new PaintContext(Rect::sized(20, 5), $buf);
+
+        $title = Line::plain('');
+
+        $panel = new PanelElement(
+            $title,
+            new TextElement('inner'),
+            Style::of(border: Border::Single),
+        );
+
+        Painter::paint($panel, $ctx);
+
+        [$tl, $tr] = Border::Single->chars();
+        self::assertSame($tl, $buf->get(0, 0)->char);
+        self::assertSame($tr, $buf->get(19, 0)->char);
+    }
+
+    #[Test]
+    public function spinnerPaintsLineLabelIntoBuffer(): void
+    {
+        $buf = Buffer::empty(20, 1);
+        $ctx = new PaintContext(Rect::sized(20, 1), $buf);
+
+        $label = Line::from(
+            Span::styled('Loading', AnsiStyle::new()->fg('#77cc77')),
+        );
+
+        Painter::paint(new SpinnerElement($label, 0), $ctx);
+
+        self::assertSame('⠋', $buf->get(0, 0)->char);
+        self::assertSame('L', $buf->get(2, 0)->char);
+        self::assertSame('o', $buf->get(3, 0)->char);
+    }
+
+    #[Test]
+    public function inputPaintsLinePromptIntoBuffer(): void
+    {
+        $buf = Buffer::empty(20, 1);
+        $ctx = new PaintContext(Rect::sized(20, 1), $buf);
+
+        $prompt = Line::from(
+            Span::styled('> ', AnsiStyle::new()->fg('#88ccff')),
+        );
+
+        Painter::paint(new InputElement('hello', $prompt, 3), $ctx);
+
+        self::assertSame('>', $buf->get(0, 0)->char);
+        self::assertSame(' ', $buf->get(1, 0)->char);
+        self::assertSame('h', $buf->get(2, 0)->char);
+
+        $cursorCell = $buf->get(5, 0);
+        self::assertSame('l', $cursorCell->char);
+        self::assertTrue($cursorCell->style->hasModifier(Modifier::Reverse));
+    }
+
+    #[Test]
+    public function progressPaintsLineLabelIntoBuffer(): void
+    {
+        $buf = Buffer::empty(30, 1);
+        $ctx = new PaintContext(Rect::sized(30, 1), $buf);
+
+        $label = Line::from(
+            Span::styled('CPU', AnsiStyle::new()->bold()),
+        );
+
+        Painter::paint(new ProgressElement(0.5, $label), $ctx);
+
+        self::assertSame('C', $buf->get(0, 0)->char);
+        self::assertSame('P', $buf->get(1, 0)->char);
+        self::assertSame('U', $buf->get(2, 0)->char);
+        self::assertSame(' ', $buf->get(3, 0)->char);
+        self::assertNotSame(' ', $buf->get(4, 0)->char);
     }
 
     protected function tearDown(): void

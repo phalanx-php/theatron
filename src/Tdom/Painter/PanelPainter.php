@@ -7,6 +7,7 @@ namespace Phalanx\Theatron\Tdom\Painter;
 use Phalanx\Theatron\Buffer\Rect;
 use Phalanx\Theatron\Layout\Border;
 use Phalanx\Theatron\Tdom\Element\PanelElement;
+use Phalanx\Theatron\Text\Line;
 
 final class PanelPainter
 {
@@ -37,11 +38,21 @@ final class PanelPainter
             $ctx->buffer->set($area->right - 1, $y, $v, $ansi);
         }
 
-        if ($element->title !== '' && $area->width > 4) {
+        $title = $element->title;
+
+        if ($title instanceof Line) {
+            if ($title->width > 0 && $area->width > 4) {
+                $maxTitleLen = $area->width - 4;
+                $ctx->buffer->putString($area->x + 1, $area->y, ' ', $ansi);
+                $ctx->buffer->putLine($area->x + 2, $area->y, $title, $maxTitleLen);
+                $afterTitle = min($area->x + 2 + $title->width, $area->x + 2 + $maxTitleLen);
+                $ctx->buffer->putString($afterTitle, $area->y, ' ', $ansi);
+            }
+        } elseif ($title !== '' && $area->width > 4) {
             $maxTitleLen = $area->width - 4;
-            $titleText = mb_strlen($element->title) > $maxTitleLen
-                ? mb_substr($element->title, 0, $maxTitleLen - 1) . '~'
-                : $element->title;
+            $titleText = mb_strlen($title) > $maxTitleLen
+                ? mb_substr($title, 0, $maxTitleLen - 1) . '~'
+                : $title;
 
             $ctx->buffer->putString($area->x + 1, $area->y, " {$titleText} ", $ansi);
         }

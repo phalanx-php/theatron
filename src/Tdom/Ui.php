@@ -29,8 +29,8 @@ final class Ui
 
     public function text(string|Line $content, ?Style $style = null): TextElement
     {
-        if (is_string($content) && $this->theme !== null && str_contains($content, '[')) {
-            $content = BBCode::parse($content, $this->theme);
+        if (is_string($content)) {
+            $content = self::markup($content, $this->theme);
         }
 
         return new TextElement($content, $style);
@@ -38,7 +38,7 @@ final class Ui
 
     public function panel(string $title, Renderable $child, ?Style $style = null): PanelElement
     {
-        return new PanelElement($title, $child, $style);
+        return new PanelElement(self::markup($title, $this->theme), $child, $style);
     }
 
     public function column(Renderable ...$children): ColumnElement
@@ -68,7 +68,7 @@ final class Ui
         int $cursor = 0,
         ?Style $style = null,
     ): InputElement {
-        return new InputElement($value, $prompt, $cursor, $style);
+        return new InputElement($value, self::markup($prompt, $this->theme), $cursor, $style);
     }
 
     public function statusLine(Renderable ...$sections): StatusLineElement
@@ -78,7 +78,11 @@ final class Ui
 
     public function spinner(?string $label = null, int $frame = 0, ?Style $style = null): SpinnerElement
     {
-        return new SpinnerElement($label, $frame, $style);
+        return new SpinnerElement(
+            $label !== null ? self::markup($label, $this->theme) : null,
+            $frame,
+            $style,
+        );
     }
 
     public function divider(?Style $style = null): DividerElement
@@ -88,6 +92,19 @@ final class Ui
 
     public function progress(float $value, ?string $label = null, ?Style $style = null): ProgressElement
     {
-        return new ProgressElement($value, $label, $style);
+        return new ProgressElement(
+            $value,
+            $label !== null ? self::markup($label, $this->theme) : null,
+            $style,
+        );
+    }
+
+    private static function markup(string $text, ?Theme $theme): string|Line
+    {
+        if ($theme === null || !str_contains($text, '[')) {
+            return $text;
+        }
+
+        return BBCode::parse($text, $theme);
     }
 }

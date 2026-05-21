@@ -6,6 +6,7 @@ namespace Phalanx\Theatron\Tdom\Painter;
 
 use Phalanx\Theatron\Style\Style as AnsiStyle;
 use Phalanx\Theatron\Tdom\Element\ProgressElement;
+use Phalanx\Theatron\Text\Line;
 
 final class ProgressPainter
 {
@@ -24,9 +25,12 @@ final class ProgressPainter
         $emptyStyle = self::$emptyStyle ??= AnsiStyle::new()->dim();
 
         $pctText = sprintf(' %3d%%', (int) round($progress * 100));
-        $labelLen = ($element->label !== null && $element->label !== '')
-            ? mb_strlen($element->label) + 1
-            : 0;
+        $label = $element->label;
+        $labelLen = match (true) {
+            $label instanceof Line => $label->width > 0 ? $label->width + 1 : 0,
+            $label !== null && $label !== '' => mb_strlen($label) + 1,
+            default => 0,
+        };
         $pctLen = 5;
         $barWidth = $ctx->area->width - $pctLen - $labelLen;
 
@@ -37,8 +41,12 @@ final class ProgressPainter
             return;
         }
 
-        if ($element->label !== null && $element->label !== '') {
-            $x = $ctx->buffer->putString($x, $ctx->area->y, $element->label . ' ', $ansi);
+        if ($label instanceof Line && $label->width > 0) {
+            $ctx->buffer->putLine($x, $ctx->area->y, $label, $ctx->area->width - $pctLen);
+            $x += $label->width;
+            $x = $ctx->buffer->putString($x, $ctx->area->y, ' ', $ansi);
+        } elseif (is_string($label) && $label !== '') {
+            $x = $ctx->buffer->putString($x, $ctx->area->y, $label . ' ', $ansi);
         }
 
         $filled = (int) round($barWidth * $progress);

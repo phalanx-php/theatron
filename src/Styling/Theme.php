@@ -18,6 +18,9 @@ final class Theme
     private AnsiStyle $reverseStyle;
     private AnsiStyle $strikethroughStyle;
 
+    /** @var array<string, AnsiStyle> */
+    private array $customTags = [];
+
     private function __construct(
         private(set) Color $fg,
         private(set) Color $bg,
@@ -70,9 +73,23 @@ final class Theme
         );
     }
 
+    /** @param array<string, AnsiStyle> $tags */
+    public function withTags(array $tags): self
+    {
+        $clone = clone $this;
+
+        foreach ($tags as $name => $style) {
+            $clone->customTags[strtolower($name)] = $style;
+        }
+
+        return $clone;
+    }
+
     public function resolve(string $name): ?AnsiStyle
     {
-        return match (strtolower($name)) {
+        $key = strtolower($name);
+
+        return $this->customTags[$key] ?? match ($key) {
             'default' => $this->default,
             'muted' => $this->muted,
             'subtle' => $this->subtle,

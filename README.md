@@ -67,14 +67,15 @@ final class Counter implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text("Count: {$this->count->value}");
+        return $ctx->ui->text("Count: {$this->count->get()}");
     }
 }
 ```
 
-Read with `$signal->value`, write with `$signal->value = $new`. The mount system
-automatically subscribes to all signal properties on the component, so mutations
-trigger re-renders without manual wiring.
+Read with `$signal->get()`, write with `$signal->set($new)`. To derive from the
+current atomic value, pass a static closure: `$signal->set(static fn(int $current): int => $current + 1)`.
+Non-closure callables are stored as values; only `Closure` instances are treated
+as updater callbacks.
 
 Signals passed as constructor params from a parent are treated as **borrowed** --
 the child subscribes to changes but does not own or dispose them.

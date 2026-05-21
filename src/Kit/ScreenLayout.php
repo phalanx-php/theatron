@@ -17,14 +17,14 @@ final class ScreenLayout
 
     public static function mainWithStatusBar(): self
     {
-        return (new self())
+        return new self()
             ->slot('main', static fn(int $w, int $h): Rect => Rect::of(0, 0, $w, max(1, $h - 1)))
             ->slot('status', static fn(int $w, int $h): Rect => Rect::of(0, max(0, $h - 1), $w, 1));
     }
 
     public static function mainWithDevtoolsAndStatusBar(int $devtoolsHeight = 6): self
     {
-        return (new self())
+        return new self()
             ->slot('main', static fn(int $w, int $h): Rect => Rect::of(
                 0,
                 0,

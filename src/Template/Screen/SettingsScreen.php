@@ -9,7 +9,7 @@ use Phalanx\Theatron\Contract\HasStatusBar;
 use Phalanx\Theatron\Contract\Screen;
 use Phalanx\Theatron\Kit\StatusBar;
 use Phalanx\Theatron\Layout\Border;
-use Phalanx\Theatron\Style\Color;
+use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Tdom\Style as TdomStyle;
 use Phalanx\Theatron\Tdom\Ui;
@@ -25,11 +25,11 @@ class SettingsScreen implements Screen, HasStatusBar
     public function __invoke(ScreenContext $ctx): Renderable
     {
         return $ctx->ui->column(
-            self::renderProviderPanel($ctx->ui),
+            self::renderProviderPanel($ctx->ui, $ctx->theme),
             $ctx->ui->divider(),
-            self::renderModelPanel($ctx->ui),
+            self::renderModelPanel($ctx->ui, $ctx->theme),
             $ctx->ui->divider(),
-            self::renderActivityPanel($ctx->ui),
+            self::renderActivityPanel($ctx->ui, $ctx->theme),
         );
     }
 
@@ -43,12 +43,12 @@ class SettingsScreen implements Screen, HasStatusBar
             ->render($ui);
     }
 
-    private static function panelStyle(): TdomStyle
+    private static function panelStyle(Theme $theme): TdomStyle
     {
-        return TdomStyle::of(border: Border::Rounded, color: Color::indexed(240));
+        return TdomStyle::of(border: Border::Rounded, color: $theme->border);
     }
 
-    private static function renderProviderPanel(Ui $ui): Renderable
+    private static function renderProviderPanel(Ui $ui, Theme $theme): Renderable
     {
         return $ui->panel(
             'Provider',
@@ -56,22 +56,22 @@ class SettingsScreen implements Screen, HasStatusBar
                 $ui->text('Type: Ollama'),
                 $ui->text('URL: http://localhost:11434'),
             ),
-            style: self::panelStyle(),
+            style: self::panelStyle($theme),
         );
     }
 
-    private static function renderModelPanel(Ui $ui): Renderable
+    private static function renderModelPanel(Ui $ui, Theme $theme): Renderable
     {
         return $ui->panel(
             'Model',
             $ui->column(
                 $ui->text('Name: qwen2.5-coder:7b'),
             ),
-            style: self::panelStyle(),
+            style: self::panelStyle($theme),
         );
     }
 
-    private static function renderActivityPanel(Ui $ui): Renderable
+    private static function renderActivityPanel(Ui $ui, Theme $theme): Renderable
     {
         return $ui->panel(
             'Activity',
@@ -79,7 +79,7 @@ class SettingsScreen implements Screen, HasStatusBar
                 $ui->text('Max Invocations: 3'),
                 $ui->text('Timeout: none'),
             ),
-            style: self::panelStyle(),
+            style: self::panelStyle($theme),
         );
     }
 }

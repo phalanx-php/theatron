@@ -70,7 +70,7 @@ final class OlympusOverlay implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text($this->title->value);
+        return $ctx->ui->text($this->title->get());
     }
 }
 

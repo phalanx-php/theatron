@@ -34,7 +34,7 @@ final class SignalRegistry
         foreach ($this->signals as $signal => $meta) {
             $entries[] = new SignalSnapshot(
                 label: $meta->label,
-                value: self::formatValue($signal->value),
+                value: self::formatValue($signal->get()),
                 subscriberCount: $signal->subscriberCount,
                 isDisposed: $signal->isDisposed,
             );

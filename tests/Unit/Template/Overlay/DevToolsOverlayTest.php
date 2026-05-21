@@ -53,7 +53,7 @@ final class DevToolsOverlayTest extends TestCase
     {
         [$overlay] = $this->makeOverlay();
 
-        self::assertSame(DevToolsTab::Metrics->value, $overlay->activeTab->value);
+        self::assertSame(DevToolsTab::Metrics->value, $overlay->activeTab->get());
     }
 
     #[Test]
@@ -95,7 +95,7 @@ final class DevToolsOverlayTest extends TestCase
             ->register(new AgentSummary(id: 'agent_leonidas', name: 'Leonidas', capabilities: ['tactics']));
 
         [$overlay, $mountSystem] = $this->makeOverlay($store);
-        $overlay->activeTab->value = DevToolsTab::Store->value;
+        $overlay->activeTab->set(DevToolsTab::Store->value);
 
         $root = $this->assertColumn($overlay($this->makeContext($mountSystem)));
         $body = $this->assertPanel($root->children[1]);
@@ -149,7 +149,7 @@ final class DevToolsOverlayTest extends TestCase
     public function renderSignalsTabShowsEmptyStateWhenRegistryDisabled(): void
     {
         [$overlay, $mountSystem] = $this->makeOverlay();
-        $overlay->activeTab->value = DevToolsTab::Signals->value;
+        $overlay->activeTab->set(DevToolsTab::Signals->value);
 
         $root = $this->assertColumn($overlay($this->makeContext($mountSystem)));
         $body = $this->assertPanel($root->children[1]);
@@ -167,7 +167,7 @@ final class DevToolsOverlayTest extends TestCase
         $registry->register($signal, 'apollo.count');
 
         [$overlay, $mountSystem] = $this->makeOverlay(registry: $registry);
-        $overlay->activeTab->value = DevToolsTab::Signals->value;
+        $overlay->activeTab->set(DevToolsTab::Signals->value);
 
         $root = $this->assertColumn($overlay($this->makeContext($mountSystem)));
         $body = $this->assertPanel($root->children[1]);
@@ -186,7 +186,7 @@ final class DevToolsOverlayTest extends TestCase
         $signal->dispose();
 
         [$overlay, $mountSystem] = $this->makeOverlay(registry: $registry);
-        $overlay->activeTab->value = DevToolsTab::Signals->value;
+        $overlay->activeTab->set(DevToolsTab::Signals->value);
 
         $root = $this->assertColumn($overlay($this->makeContext($mountSystem)));
         $body = $this->assertPanel($root->children[1]);
@@ -199,7 +199,7 @@ final class DevToolsOverlayTest extends TestCase
     public function renderTreeTabShowsEmptyStateWhenNoComponents(): void
     {
         [$overlay, $mountSystem] = $this->makeOverlay();
-        $overlay->activeTab->value = DevToolsTab::Tree->value;
+        $overlay->activeTab->set(DevToolsTab::Tree->value);
 
         $root = $this->assertColumn($overlay($this->makeContext($mountSystem)));
         $body = $this->assertPanel($root->children[1]);
@@ -216,7 +216,7 @@ final class DevToolsOverlayTest extends TestCase
         $mountSystem->mount(OverlayTreeFixtureComponent::class);
 
         [$overlay] = $this->makeOverlay(mountSystem: $mountSystem);
-        $overlay->activeTab->value = DevToolsTab::Tree->value;
+        $overlay->activeTab->set(DevToolsTab::Tree->value);
 
         $root = $this->assertColumn($overlay($this->makeContext($mountSystem)));
         $body = $this->assertPanel($root->children[1]);

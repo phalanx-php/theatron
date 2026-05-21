@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Phalanx\Theatron\Reactive;
 
 use Closure;
+use Phalanx\Scope\Scope;
 use ReflectionFunction;
 use RuntimeException;
 
@@ -15,26 +16,6 @@ final class Signal
     /** @var array<int, Closure(): void> */
     private array $subscribers = [];
 
-    public mixed $value {
-        get {
-            Tracker::recordAccess($this);
-
-            return $this->storedValue;
-        }
-        set(mixed $value) {
-            if ($this->isDisposed) {
-                throw new RuntimeException('Cannot write to a disposed signal.');
-            }
-
-            if ($value === $this->storedValue) {
-                return;
-            }
-
-            $this->storedValue = $value;
-            $this->notify();
-        }
-    }
-
     public int $subscriberCount {
         get => count($this->subscribers);
     }
@@ -43,6 +24,35 @@ final class Signal
 
     public function __construct(private mixed $storedValue)
     {
+    }
+
+    public function get(): mixed
+    {
+        Tracker::recordAccess($this);
+
+        return $this->storedValue;
+    }
+
+    public function set(mixed $value, ?Scope $scope = null): void
+    {
+        if ($this->isDisposed) {
+            throw new RuntimeException('Cannot write to a disposed signal.');
+        }
+
+        if ($value instanceof Closure) {
+            if (!new ReflectionFunction($value)->isStatic()) {
+                throw new RuntimeException('Signal updater closures must be static closures.');
+            }
+
+            $value = $value($this->storedValue, $scope);
+        }
+
+        if ($value === $this->storedValue) {
+            return;
+        }
+
+        $this->storedValue = $value;
+        $this->notify();
     }
 
     public function subscribe(Closure $subscriber): SignalSubscription

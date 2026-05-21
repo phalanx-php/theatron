@@ -90,7 +90,7 @@ final class StoreIntegrationTest extends TestCase
 
         $batch->consume();
 
-        $component->morale->value = 'high';
+        $component->morale->set('high');
         self::assertTrue($batch->isDirty);
     }
 
@@ -190,6 +190,6 @@ final class MixedComponent implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text($this->store->warriors->count . ' - ' . $this->morale->value);
+        return $ctx->ui->text($this->store->warriors->count . ' - ' . $this->morale->get());
     }
 }

@@ -7,6 +7,7 @@ namespace Phalanx\Theatron\Tests\Unit\Styling;
 use Phalanx\Theatron\Layout\Border;
 use Phalanx\Theatron\Style\Color;
 use Phalanx\Theatron\Style\Modifier;
+use Phalanx\Theatron\Style\Style as AnsiStyle;
 use Phalanx\Theatron\Styling\Theme;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -168,5 +169,84 @@ final class ThemeTest extends TestCase
 
         self::assertSame($theme->resolve('bold'), $theme->resolve('bold'));
         self::assertSame($theme->resolve('italic'), $theme->resolve('italic'));
+    }
+
+    #[Test]
+    public function withTagsEmptyPreservesBuiltins(): void
+    {
+        $original = Theme::default();
+        $themed = $original->withTags([]);
+
+        self::assertNotSame($original, $themed);
+
+        $accent = $themed->resolve('accent');
+        self::assertNotNull($accent);
+        self::assertTrue($accent->equals($original->accent));
+
+        $bold = $themed->resolve('bold');
+        self::assertNotNull($bold);
+        self::assertTrue($bold->hasModifier(Modifier::Bold));
+    }
+
+    #[Test]
+    public function withTagsCustomTagResolves(): void
+    {
+        $style = AnsiStyle::new()->fg('#77cc77')->bold();
+        $theme = Theme::default()->withTags(['agent' => $style]);
+
+        $resolved = $theme->resolve('agent');
+        self::assertNotNull($resolved);
+        self::assertTrue($resolved->equals($style));
+    }
+
+    #[Test]
+    public function withTagsCustomTagIsCaseInsensitive(): void
+    {
+        $style = AnsiStyle::new()->fg('#ff6666');
+        $theme = Theme::default()->withTags(['danger' => $style]);
+
+        self::assertNotNull($theme->resolve('DANGER'));
+        self::assertNotNull($theme->resolve('Danger'));
+
+        $resolved = $theme->resolve('danger');
+        self::assertNotNull($resolved);
+        self::assertTrue($resolved->equals($style));
+    }
+
+    #[Test]
+    public function withTagsOverridesBuiltIn(): void
+    {
+        $custom = AnsiStyle::new()->fg('#ff0000')->bold();
+        $theme = Theme::default()->withTags(['accent' => $custom]);
+
+        $resolved = $theme->resolve('accent');
+        self::assertNotNull($resolved);
+        self::assertTrue($resolved->equals($custom));
+        self::assertFalse($resolved->equals(Theme::default()->accent));
+    }
+
+    #[Test]
+    public function withTagsDoesNotMutateOriginal(): void
+    {
+        $original = Theme::default();
+        $original->withTags(['agent' => AnsiStyle::new()->fg('#77cc77')]);
+
+        self::assertNull($original->resolve('agent'));
+    }
+
+    #[Test]
+    public function withTagsChainingAccumulatesTags(): void
+    {
+        $agentStyle = AnsiStyle::new()->fg('#77cc77');
+        $dangerStyle = AnsiStyle::new()->fg('#ff6666');
+
+        $theme = Theme::default()
+            ->withTags(['agent' => $agentStyle])
+            ->withTags(['danger' => $dangerStyle]);
+
+        self::assertNotNull($theme->resolve('agent'));
+        self::assertNotNull($theme->resolve('danger'));
+        self::assertTrue($theme->resolve('agent')->equals($agentStyle));
+        self::assertTrue($theme->resolve('danger')->equals($dangerStyle));
     }
 }

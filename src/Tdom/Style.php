@@ -33,6 +33,11 @@ final class Style
         return new self($size, $align, $border, $padding, $color, $background);
     }
 
+    public static function empty(): self
+    {
+        return new self();
+    }
+
     public function patch(self $other): self
     {
         return new self(
@@ -43,5 +48,35 @@ final class Style
             $other->color ?? $this->color,
             $other->background ?? $this->background,
         );
+    }
+
+    public function withSize(Size $size): self
+    {
+        return new self($size, $this->align, $this->border, $this->padding, $this->color, $this->background);
+    }
+
+    public function withAlign(Align $align): self
+    {
+        return new self($this->size, $align, $this->border, $this->padding, $this->color, $this->background);
+    }
+
+    public function withBorder(Border $border): self
+    {
+        return new self($this->size, $this->align, $border, $this->padding, $this->color, $this->background);
+    }
+
+    public function withPadding(Padding $padding): self
+    {
+        return new self($this->size, $this->align, $this->border, $padding, $this->color, $this->background);
+    }
+
+    public function withColor(Color $color): self
+    {
+        return new self($this->size, $this->align, $this->border, $this->padding, $color, $this->background);
+    }
+
+    public function withBackground(Color $background): self
+    {
+        return new self($this->size, $this->align, $this->border, $this->padding, $this->color, $background);
     }
 }

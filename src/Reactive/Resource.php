@@ -16,6 +16,7 @@ final class Resource
     private(set) mixed $value = null;
     private(set) ?Throwable $error = null;
     private(set) bool $ok = false;
+    private(set) string $buffer = '';
 
     private bool $disposed = false;
     private int $generation = 0;
@@ -42,6 +43,7 @@ final class Resource
 
         $this->loading = true;
         $this->error = null;
+        $this->buffer = '';
         $this->onDirty?->__invoke();
 
         $gen = ++$this->generation;
@@ -51,6 +53,27 @@ final class Resource
             $this->fetchAsync($gen, $key, $fetcher);
         } else {
             $this->fetchSync($gen, $key, $fetcher);
+        }
+    }
+
+    public function stream(mixed $key = null): void
+    {
+        if ($this->disposed) {
+            return;
+        }
+
+        $this->loading = true;
+        $this->error = null;
+        $this->buffer = '';
+        $this->onDirty?->__invoke();
+
+        $gen = ++$this->generation;
+        $fetcher = $this->fetcher;
+
+        if ($this->scope !== null) {
+            $this->streamAsync($gen, $key, $fetcher);
+        } else {
+            $this->streamSync($gen, $key, $fetcher);
         }
     }
 
@@ -121,5 +144,88 @@ final class Resource
             $self->loading = false;
             $self->onDirty?->__invoke();
         });
+    }
+
+    private function streamSync(int $gen, mixed $key, Closure $fetcher): void
+    {
+        try {
+            $this->consumeStream($gen, $fetcher($key));
+        } catch (Throwable $e) {
+            if ($this->generation === $gen && !$this->disposed) {
+                $this->error = $e;
+                $this->loading = false;
+                $this->onDirty?->__invoke();
+            }
+
+            return;
+        }
+
+        if ($this->generation !== $gen || $this->disposed) {
+            return;
+        }
+
+        $this->value = $this->buffer;
+        $this->ok = true;
+        $this->loading = false;
+        $this->onDirty?->__invoke();
+    }
+
+    private function streamAsync(int $gen, mixed $key, Closure $fetcher): void
+    {
+        if ($this->scope === null) {
+            return;
+        }
+
+        $weakSelf = \WeakReference::create($this);
+
+        $this->scope->execute(static function () use ($weakSelf, $gen, $key, $fetcher): void {
+            $self = $weakSelf->get();
+            if ($self === null || $self->generation !== $gen || $self->disposed) {
+                return;
+            }
+
+            try {
+                $self->consumeStream($gen, $fetcher($key));
+            } catch (Throwable $e) {
+                $self = $weakSelf->get();
+                if ($self !== null && $self->generation === $gen && !$self->disposed) {
+                    $self->error = $e;
+                    $self->loading = false;
+                    $self->onDirty?->__invoke();
+                }
+
+                return;
+            }
+
+            $self = $weakSelf->get();
+            if ($self === null || $self->generation !== $gen || $self->disposed) {
+                return;
+            }
+
+            $self->value = $self->buffer;
+            $self->ok = true;
+            $self->loading = false;
+            $self->onDirty?->__invoke();
+        });
+    }
+
+    private function consumeStream(int $gen, mixed $stream): void
+    {
+        if (!is_iterable($stream)) {
+            throw new RuntimeException('Resource stream fetcher must return an iterable.');
+        }
+
+        foreach ($stream as $chunk) {
+            if ($this->generation !== $gen || $this->disposed) {
+                return;
+            }
+
+            if (!is_string($chunk)) {
+                throw new RuntimeException('Resource stream chunks must be strings.');
+            }
+
+            $this->buffer .= $chunk;
+            $this->onDirty?->__invoke();
+        }
     }
 }

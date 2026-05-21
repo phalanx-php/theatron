@@ -192,6 +192,193 @@ final class ResourceTest extends TestCase
     }
 
     #[Test]
+    public function streamAppendsChunksIntoBufferAndPromotesCompletedValue(): void
+    {
+        $dirty = 0;
+
+        $resource = new Resource(
+            fetcher: static fn(): iterable => ['Phalanx ', 'streaming ', 'works'],
+            onDirty: static function () use (&$dirty): void {
+                $dirty++;
+            },
+        );
+
+        $resource->stream();
+
+        self::assertTrue($resource->ok);
+        self::assertFalse($resource->loading);
+        self::assertSame('Phalanx streaming works', $resource->buffer);
+        self::assertSame('Phalanx streaming works', $resource->value);
+        self::assertNull($resource->error);
+        self::assertSame(5, $dirty);
+    }
+
+    #[Test]
+    public function failedStreamPreservesLastCompletedValueAndExposesPartialBuffer(): void
+    {
+        $calls = 0;
+
+        $resource = new Resource(
+            fetcher: static function () use (&$calls): iterable {
+                $calls++;
+
+                if ($calls === 1) {
+                    yield 'last ';
+                    yield 'good';
+                    return;
+                }
+
+                yield 'partial ';
+                yield 'attempt';
+
+                throw new RuntimeException('stream failed');
+            },
+        );
+
+        $resource->stream();
+        $resource->stream();
+
+        self::assertTrue($resource->ok);
+        self::assertFalse($resource->loading);
+        self::assertSame('last good', $resource->value);
+        self::assertSame('partial attempt', $resource->buffer);
+        self::assertInstanceOf(RuntimeException::class, $resource->error);
+        self::assertSame('stream failed', $resource->error->getMessage());
+    }
+
+    #[Test]
+    public function asyncStreamSupersessionIgnoresStaleChunksCompletionAndDirtyNotifications(): void
+    {
+        $dirty = 0;
+        $scope = new QueuedResourceTaskScope();
+
+        $resource = new Resource(
+            fetcher: static fn(string $key): iterable => match ($key) {
+                'slow' => ['stale ', 'stream'],
+                'fast' => ['fresh ', 'stream'],
+                default => throw new RuntimeException("Unexpected stream key {$key}."),
+            },
+            scope: $scope,
+            onDirty: static function () use (&$dirty): void {
+                $dirty++;
+            },
+        );
+
+        $resource->stream('slow');
+        $resource->stream('fast');
+
+        self::assertSame(2, $scope->queuedCount());
+        self::assertSame(2, $dirty);
+        self::assertSame('', $resource->buffer);
+        self::assertTrue($resource->loading);
+
+        $scope->runQueued(1);
+
+        self::assertTrue($resource->ok);
+        self::assertFalse($resource->loading);
+        self::assertSame('fresh stream', $resource->buffer);
+        self::assertSame('fresh stream', $resource->value);
+        self::assertSame(5, $dirty);
+
+        $scope->runQueued(0);
+
+        self::assertSame('fresh stream', $resource->buffer);
+        self::assertSame('fresh stream', $resource->value);
+        self::assertSame(5, $dirty);
+    }
+
+    #[Test]
+    public function disposeBeforeAsyncStreamCompletionPreventsWritesAndDirtyNotification(): void
+    {
+        $dirty = 0;
+        $scope = new QueuedResourceTaskScope();
+
+        $resource = new Resource(
+            fetcher: static fn(): iterable => ['late ', 'stream'],
+            scope: $scope,
+            onDirty: static function () use (&$dirty): void {
+                $dirty++;
+            },
+        );
+
+        $resource->stream();
+        $resource->dispose();
+
+        self::assertFalse($resource->loading);
+        self::assertSame('', $resource->buffer);
+        self::assertSame(1, $dirty);
+
+        $scope->runQueued(0);
+
+        self::assertFalse($resource->ok);
+        self::assertFalse($resource->loading);
+        self::assertSame('', $resource->buffer);
+        self::assertNull($resource->value);
+        self::assertNull($resource->error);
+        self::assertSame(1, $dirty);
+    }
+
+    #[Test]
+    public function streamCapturesNonIterableFetcherResultAsError(): void
+    {
+        $resource = new Resource(
+            fetcher: static fn(): string => 'not iterable',
+        );
+
+        $resource->stream();
+
+        self::assertFalse($resource->ok);
+        self::assertFalse($resource->loading);
+        self::assertSame('', $resource->buffer);
+        self::assertNull($resource->value);
+        self::assertInstanceOf(RuntimeException::class, $resource->error);
+        self::assertSame('Resource stream fetcher must return an iterable.', $resource->error->getMessage());
+    }
+
+    #[Test]
+    public function streamCapturesNonStringChunkAsError(): void
+    {
+        $resource = new Resource(
+            fetcher: static fn(): iterable => ['valid', 42],
+        );
+
+        $resource->stream();
+
+        self::assertFalse($resource->ok);
+        self::assertFalse($resource->loading);
+        self::assertSame('valid', $resource->buffer);
+        self::assertNull($resource->value);
+        self::assertInstanceOf(RuntimeException::class, $resource->error);
+        self::assertSame('Resource stream chunks must be strings.', $resource->error->getMessage());
+    }
+
+    #[Test]
+    public function refreshClearsPreviousStreamBuffer(): void
+    {
+        $calls = 0;
+
+        $resource = new Resource(
+            fetcher: static function () use (&$calls): mixed {
+                $calls++;
+
+                if ($calls === 1) {
+                    return ['stream ', 'buffer'];
+                }
+
+                return 'fresh scalar';
+            },
+        );
+
+        $resource->stream();
+        $resource->refresh();
+
+        self::assertTrue($resource->ok);
+        self::assertFalse($resource->loading);
+        self::assertSame('', $resource->buffer);
+        self::assertSame('fresh scalar', $resource->value);
+    }
+
+    #[Test]
     public function disposalPreventsRefresh(): void
     {
         $fetched = false;

@@ -150,6 +150,19 @@ final class MountSystem
             return;
         }
 
+        try {
+            foreach ($frame['pending'] as $replacement) {
+                $this->activateMounted($replacement['mounted']);
+            }
+        } catch (\Throwable $e) {
+            foreach ($frame['pending'] as $replacement) {
+                $replacement['mounted']->dispose();
+                $this->forgetMounted($replacement['mounted']);
+            }
+
+            throw $e;
+        }
+
         foreach ($frame['pending'] as $key => $replacement) {
             if ($replacement['previous'] !== null) {
                 $replacement['previous']->dispose();
@@ -158,7 +171,6 @@ final class MountSystem
 
             $this->slots[$key] = $replacement['mounted'];
             $this->slotSignatures[$key] = $replacement['signature'];
-            $this->activateMounted($replacement['mounted']);
         }
 
         $this->disposeUnusedSlots($ownerId, $frame['next']);

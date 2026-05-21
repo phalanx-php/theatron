@@ -425,6 +425,41 @@ final class MountSystemTest extends TestCase
     }
 
     #[Test]
+    public function failedReplacementActivationPreservesPreviousSlot(): void
+    {
+        $taskScope = $this->createStub(TaskScope::class);
+        $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class), $taskScope);
+        $tracker = new \stdClass();
+        $tracker->mounted = 0;
+        $tracker->unmounted = 0;
+        $model = new \stdClass();
+        $model->label = new Signal('first');
+        $model->fail = false;
+        $model->tracker = $tracker;
+        $parent = $this->mountParent(new ActivationSlotParentComponent($model), $system);
+        $ctx = $this->renderContext($system);
+
+        $parent->render($ctx);
+        $first = $system->mounted()[0];
+
+        $model->label->set('second');
+        $model->fail = true;
+
+        try {
+            $parent->render($ctx);
+            self::fail('Expected failed replacement activation.');
+        } catch (\RuntimeException $e) {
+            self::assertSame('replacement mount failed', $e->getMessage());
+        }
+
+        self::assertFalse($first->isDisposed);
+        self::assertSame($first, $system->mounted()[0]);
+        self::assertCount(1, $system->mounted());
+        self::assertSame(1, $tracker->mounted);
+        self::assertSame(0, $tracker->unmounted);
+    }
+
+    #[Test]
     public function unusedRenderSlotsAreDisposedAfterSuccessfulParentRender(): void
     {
         $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
@@ -1019,6 +1054,77 @@ final class LabelSlotChildComponent implements Component
     public function __invoke(RenderContext $ctx): Renderable
     {
         return $ctx->ui->text($this->label);
+    }
+}
+
+final class ActivationSlotParentComponent implements Component
+{
+    public function __construct(
+        private \stdClass $model,
+    ) {
+    }
+
+    public function __invoke(RenderContext $ctx): Renderable
+    {
+        $component = $this->model->fail
+            ? FailingActivationSlotChildComponent::class
+            : TrackedActivationSlotChildComponent::class;
+
+        return $ctx->ui->column(
+            $ctx->mount(
+                $component,
+                label: (string) $this->model->label->get(),
+                tracker: $this->model->tracker,
+            ),
+        );
+    }
+}
+
+final class TrackedActivationSlotChildComponent implements Component, Mountable
+{
+    public function __construct(
+        private string $label,
+        private \stdClass $tracker,
+    ) {
+    }
+
+    public function __invoke(RenderContext $ctx): Renderable
+    {
+        return $ctx->ui->text($this->label);
+    }
+
+    public function onMount(TaskScope $scope): void
+    {
+        $this->tracker->mounted++;
+    }
+
+    public function onUnmount(): void
+    {
+        $this->tracker->unmounted++;
+    }
+}
+
+final class FailingActivationSlotChildComponent implements Component, Mountable
+{
+    public function __construct(
+        private string $label,
+        private \stdClass $tracker,
+    ) {
+    }
+
+    public function __invoke(RenderContext $ctx): Renderable
+    {
+        return $ctx->ui->text($this->label);
+    }
+
+    public function onMount(TaskScope $scope): void
+    {
+        throw new \RuntimeException('replacement mount failed');
+    }
+
+    public function onUnmount(): void
+    {
+        $this->tracker->unmounted++;
     }
 }
 

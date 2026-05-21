@@ -16,6 +16,7 @@ use Phalanx\Trace\Trace;
 
 final class RecordingTaskScope implements TaskScope
 {
+    /** unsupported: this test double only records task-scope behavior. */
     public RuntimeContext $runtime {
         get => throw new \RuntimeException('Recording task scope does not expose runtime context.');
     }
@@ -38,8 +39,8 @@ final class RecordingTaskScope implements TaskScope
 
     public function __construct()
     {
-        $this->cancellation = CancellationToken::create();
         $this->trace = new Trace();
+        $this->cancellation = CancellationToken::create();
     }
 
     public function callCount(): int

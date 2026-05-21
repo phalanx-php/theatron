@@ -30,6 +30,7 @@ final class MountedScreen
 
     private ?Renderable $lastResult = null;
     private ?ScreenContext $renderCtx = null;
+    private RenderDependencySet $renderDependencies;
 
     /** @var list<Signal> */
     private array $ownedSignals;
@@ -40,7 +41,6 @@ final class MountedScreen
     /** @var list<StoreSubscription> */
     private array $storeSubscriptions;
 
-    private RenderDependencySet $renderDependencies;
     private bool $mountLifecycleStarted = false;
 
     public function __construct(

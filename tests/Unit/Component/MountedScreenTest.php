@@ -225,7 +225,7 @@ final class MountedScreenTest extends TestCase
     }
 
     #[Test]
-    public function slowScreenRenderEmitsTraceDiagnosticWithoutInventingTaskWait(): void
+    public function slowScreenRenderEmitsTraceDiagnosticInPlainScope(): void
     {
         $clock = new ClockProbe(1.0, 1.08);
         $scope = new RecordingTaskScope();

@@ -112,8 +112,9 @@ final class MountedComponentTest extends TestCase
 
         $signal = new Signal('hello');
         $component = new class ($signal) implements Component {
-            public function __construct(private(set) Signal $data)
-            {
+            public function __construct(
+                private(set) Signal $data,
+            ) {
             }
 
             public function __invoke(RenderContext $ctx): Renderable
@@ -774,7 +775,7 @@ final class MountedComponentTest extends TestCase
     }
 
     #[Test]
-    public function slowRenderEmitsTraceDiagnosticWithoutInventingTaskWait(): void
+    public function slowRenderEmitsTraceDiagnosticInPlainScope(): void
     {
         $clock = new ClockProbe(1.0, 1.075);
         $scope = new RecordingTaskScope();

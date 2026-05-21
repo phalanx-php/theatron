@@ -16,6 +16,8 @@ use Phalanx\Supervisor\TaskHandle;
 use Phalanx\Task\Executable;
 use Phalanx\Task\Scopeable;
 use Phalanx\Testing\PhalanxTestCase;
+use Phalanx\Theatron\Buffer\Buffer;
+use Phalanx\Theatron\Buffer\Rect;
 use Phalanx\Theatron\Component\MountedComponent;
 use Phalanx\Theatron\Component\MountSystem;
 use Phalanx\Theatron\Component\SignalScanner;
@@ -26,6 +28,8 @@ use Phalanx\Theatron\Reactive\Resource;
 use Phalanx\Theatron\Reactive\Signal;
 use Phalanx\Theatron\Rendering\RenderDiagnostics;
 use Phalanx\Theatron\Styling\Theme;
+use Phalanx\Theatron\Tdom\Painter\PaintContext;
+use Phalanx\Theatron\Tdom\Painter\Painter;
 use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Tdom\Ui;
 use Phalanx\Worker\WorkerTask;
@@ -41,8 +45,8 @@ final class MemoryDisposalChurnTest extends PhalanxTestCase
     public function repeatedSlotReplacementDoesNotGrowMountedChildrenOrSubscriptions(): void
     {
         $system = new MountSystem($this->createStub(Scope::class));
-        $model = new C6SlotChurnModel();
-        $parent = $this->mountComponent(new C6SlotChurnParent($model));
+        $model = new SlotChurnModel();
+        $parent = $this->mountComponent(new SlotChurnParent($model));
         $ctx = $this->renderContext($system);
         $previous = null;
 
@@ -77,8 +81,8 @@ final class MemoryDisposalChurnTest extends PhalanxTestCase
     public function repeatedNestedSlotReplacementDisposesDescendants(): void
     {
         $system = new MountSystem($this->createStub(Scope::class));
-        $model = new C6SlotChurnModel();
-        $parent = $this->mountComponent(new C6NestedSlotChurnParent($model));
+        $model = new SlotChurnModel();
+        $parent = $this->mountComponent(new NestedSlotChurnParent($model));
         $ctx = $this->renderContext($system);
         $previousPair = null;
         $activeSubscriberCount = null;
@@ -113,10 +117,53 @@ final class MemoryDisposalChurnTest extends PhalanxTestCase
     }
 
     #[Test]
+    public function repeatedPaintOwnedSlotReplacementDoesNotGrowMountedChildrenOrSubscriptions(): void
+    {
+        $system = new MountSystem($this->createStub(Scope::class));
+        $model = new SlotChurnModel();
+        $renderCtx = $this->renderContext($system);
+        $owner = new \stdClass();
+        $buffer = Buffer::empty(20, 3);
+        $previous = null;
+
+        for ($i = 0; $i < 25; $i++) {
+            $model->label->set("paint-{$i}");
+
+            Painter::paint(
+                column(
+                    mount(
+                        SlotChurnChild::class,
+                        label: (string) $model->label->get(),
+                        signal: $model->childSignal,
+                    ),
+                ),
+                new PaintContext(Rect::sized(20, 3), $buffer, renderContext: $renderCtx, mountOwner: $owner),
+            );
+
+            $mounted = $system->mounted();
+            self::assertCount(1, $mounted);
+
+            if ($previous !== null) {
+                self::assertTrue($previous->isDisposed);
+            }
+
+            self::assertFalse($mounted[0]->isDisposed);
+            self::assertSame(1, $model->childSignal->subscriberCount);
+
+            $previous = $mounted[0];
+        }
+
+        $system->disposeOwnedSlots($owner);
+
+        self::assertSame(0, $model->childSignal->subscriberCount);
+        self::assertCount(0, $system->mounted());
+    }
+
+    #[Test]
     public function resourceStreamChurnCancelsSupersededTasksAndRejectsDisposedWrites(): void
     {
         $dirty = 0;
-        $executor = new C6QueuedTaskExecutor();
+        $executor = new QueuedStreamExecutor();
 
         $resource = new Resource(
             fetcher: static fn(int $key): iterable => ["chunk-{$key}"],
@@ -145,17 +192,27 @@ final class MemoryDisposalChurnTest extends PhalanxTestCase
         self::assertSame('chunk-29', $resource->value);
 
         $buffer = $resource->buffer;
+        $dirtyAfterCompletion = $dirty;
         $value = $resource->value;
 
         $resource->dispose();
+        self::assertSame(0, $resource->subscriberCount);
+        self::assertSame(29, $executor->queuedCount());
+        self::assertSame($dirtyAfterCompletion, $dirty);
+
         $resource->stream(999);
+        self::assertSame(29, $executor->queuedCount());
+        self::assertSame($dirtyAfterCompletion, $dirty);
+
         $executor->runAllQueued();
+        self::assertSame($dirtyAfterCompletion, $dirty);
 
         $subscription->dispose();
 
         self::assertTrue($subscription->isDisposed);
         self::assertSame(0, $resource->subscriberCount);
         self::assertSame(29, $executor->cancelCount());
+        self::assertSame(0, $executor->queuedCount());
         self::assertSame($buffer, $resource->buffer);
         self::assertSame($value, $resource->value);
         self::assertGreaterThan(0, $dirty);
@@ -165,7 +222,7 @@ final class MemoryDisposalChurnTest extends PhalanxTestCase
     public function diagnosticRenderTaskChurnLeavesNoLiveAegisTaskRuns(): void
     {
         $diagnostics = RenderDiagnostics::enabled();
-        $target = new C6DiagnosticRenderTarget();
+        $target = new DiagnosticRenderTarget();
 
         self::assertSame(0, $this->scope->memory->resources->liveCount(AegisResourceSid::TaskRun));
 
@@ -179,9 +236,59 @@ final class MemoryDisposalChurnTest extends PhalanxTestCase
 
                 self::assertSame('rendered', $result);
             }
+
+            for ($i = 0; $i < 50; $i++) {
+                $result = $diagnostics->screen(
+                    $scope,
+                    $target,
+                    static fn(): string => 'screened',
+                );
+
+                self::assertSame('screened', $result);
+            }
+
+            for ($i = 0; $i < 50; $i++) {
+                self::assertRuntimeExceptionMessage(
+                    'component render failed',
+                    static function () use ($diagnostics, $scope, $target): void {
+                        $diagnostics->component(
+                            $scope,
+                            $target,
+                            static function (): string {
+                                throw new RuntimeException('component render failed');
+                            },
+                        );
+                    },
+                );
+            }
+
+            for ($i = 0; $i < 50; $i++) {
+                self::assertRuntimeExceptionMessage(
+                    'screen render failed',
+                    static function () use ($diagnostics, $scope, $target): void {
+                        $diagnostics->screen(
+                            $scope,
+                            $target,
+                            static function (): string {
+                                throw new RuntimeException('screen render failed');
+                            },
+                        );
+                    },
+                );
+            }
         });
 
         self::assertSame(0, $this->scope->memory->resources->liveCount(AegisResourceSid::TaskRun));
+    }
+
+    private static function assertRuntimeExceptionMessage(string $message, Closure $callback): void
+    {
+        try {
+            $callback();
+            self::fail("Expected runtime exception '{$message}'.");
+        } catch (RuntimeException $e) {
+            self::assertSame($message, $e->getMessage());
+        }
     }
 
     private function mountComponent(Component $component): MountedComponent
@@ -203,7 +310,7 @@ final class MemoryDisposalChurnTest extends PhalanxTestCase
     }
 }
 
-final class C6SlotChurnModel
+final class SlotChurnModel
 {
     public Signal $label;
 
@@ -216,10 +323,10 @@ final class C6SlotChurnModel
     }
 }
 
-final class C6SlotChurnParent implements Component
+final class SlotChurnParent implements Component
 {
     public function __construct(
-        private C6SlotChurnModel $model,
+        private SlotChurnModel $model,
     ) {
     }
 
@@ -227,7 +334,7 @@ final class C6SlotChurnParent implements Component
     {
         return column(
             mount(
-                C6SlotChurnChild::class,
+                SlotChurnChild::class,
                 label: (string) $this->model->label->get(),
                 signal: $this->model->childSignal,
             ),
@@ -235,10 +342,10 @@ final class C6SlotChurnParent implements Component
     }
 }
 
-final class C6NestedSlotChurnParent implements Component
+final class NestedSlotChurnParent implements Component
 {
     public function __construct(
-        private C6SlotChurnModel $model,
+        private SlotChurnModel $model,
     ) {
     }
 
@@ -246,7 +353,7 @@ final class C6NestedSlotChurnParent implements Component
     {
         return column(
             mount(
-                C6NestedSlotChurnChildOwner::class,
+                NestedSlotChurnChildOwner::class,
                 label: (string) $this->model->label->get(),
                 signal: $this->model->childSignal,
             ),
@@ -254,7 +361,7 @@ final class C6NestedSlotChurnParent implements Component
     }
 }
 
-final class C6NestedSlotChurnChildOwner implements Component
+final class NestedSlotChurnChildOwner implements Component
 {
     public function __construct(
         private(set) string $label,
@@ -266,7 +373,7 @@ final class C6NestedSlotChurnChildOwner implements Component
     {
         return column(
             mount(
-                C6SlotChurnChild::class,
+                SlotChurnChild::class,
                 label: $this->label . '-child',
                 signal: $this->signal,
             ),
@@ -274,7 +381,7 @@ final class C6NestedSlotChurnChildOwner implements Component
     }
 }
 
-final class C6SlotChurnChild implements Component
+final class SlotChurnChild implements Component
 {
     public function __construct(
         private(set) string $label,
@@ -288,11 +395,11 @@ final class C6SlotChurnChild implements Component
     }
 }
 
-final class C6DiagnosticRenderTarget
+final class DiagnosticRenderTarget
 {
 }
 
-final class C6QueuedTaskExecutor implements TaskExecutor
+final class QueuedStreamExecutor implements TaskExecutor
 {
     /** @var list<array{id:int,task:Closure,cancelled:bool}> */
     private array $tasks = [];
@@ -335,23 +442,15 @@ final class C6QueuedTaskExecutor implements TaskExecutor
             'task' => $fn,
             'cancelled' => false,
         ];
-
-        $tasks = &$this->tasks;
-        $cancelCount = &$this->cancelCount;
+        $executor = \WeakReference::create($this);
 
         return new TaskHandle(
-            id: "c6-task-{$id}",
-            name: $name ?? 'c6-task',
-            cancel: static function () use (&$tasks, &$cancelCount, $id): void {
-                foreach ($tasks as &$task) {
-                    if ($task['id'] !== $id || $task['cancelled']) {
-                        continue;
-                    }
-
-                    $task['cancelled'] = true;
-                    $cancelCount++;
-
-                    return;
+            id: "stream-task-{$id}",
+            name: $name ?? 'stream-task',
+            cancel: static function () use ($executor, $id): void {
+                $target = $executor->get();
+                if ($target instanceof self) {
+                    $target->cancel($id);
                 }
             },
             snapshot: static fn(): null => null,
@@ -361,90 +460,90 @@ final class C6QueuedTaskExecutor implements TaskExecutor
     /** @return array<string|int, mixed> */
     public function concurrent(Scopeable|Executable|Closure ...$tasks): array
     {
-        throw new RuntimeException('concurrent is not implemented by the C6 queued executor.');
+        throw new RuntimeException('concurrent is not implemented by the queued stream executor.');
     }
 
     public function race(Scopeable|Executable|Closure ...$tasks): mixed
     {
-        throw new RuntimeException('race is not implemented by the C6 queued executor.');
+        throw new RuntimeException('race is not implemented by the queued stream executor.');
     }
 
     public function any(Scopeable|Executable|Closure ...$tasks): mixed
     {
-        throw new RuntimeException('any is not implemented by the C6 queued executor.');
+        throw new RuntimeException('any is not implemented by the queued stream executor.');
     }
 
     public function map(iterable $items, Closure $fn, int $limit = 10, ?Closure $onEach = null): array
     {
-        throw new RuntimeException('map is not implemented by the C6 queued executor.');
+        throw new RuntimeException('map is not implemented by the queued stream executor.');
     }
 
     /** @return array<string|int, mixed> */
     public function series(Scopeable|Executable|Closure ...$tasks): array
     {
-        throw new RuntimeException('series is not implemented by the C6 queued executor.');
+        throw new RuntimeException('series is not implemented by the queued stream executor.');
     }
 
     public function waterfall(Scopeable|Executable|Closure ...$tasks): mixed
     {
-        throw new RuntimeException('waterfall is not implemented by the C6 queued executor.');
+        throw new RuntimeException('waterfall is not implemented by the queued stream executor.');
     }
 
     public function settle(Scopeable|Executable|Closure ...$tasks): SettlementBag
     {
-        throw new RuntimeException('settle is not implemented by the C6 queued executor.');
+        throw new RuntimeException('settle is not implemented by the queued stream executor.');
     }
 
     public function timeout(float $seconds, Scopeable|Executable|Closure $task): mixed
     {
-        throw new RuntimeException('timeout is not implemented by the C6 queued executor.');
+        throw new RuntimeException('timeout is not implemented by the queued stream executor.');
     }
 
     public function retry(Scopeable|Executable|Closure $task, RetryPolicy $policy): mixed
     {
-        throw new RuntimeException('retry is not implemented by the C6 queued executor.');
+        throw new RuntimeException('retry is not implemented by the queued stream executor.');
     }
 
     public function delay(float $seconds): void
     {
-        throw new RuntimeException('delay is not implemented by the C6 queued executor.');
+        throw new RuntimeException('delay is not implemented by the queued stream executor.');
     }
 
     public function periodic(float $interval, Closure $tick): Subscription
     {
-        throw new RuntimeException('periodic is not implemented by the C6 queued executor.');
+        throw new RuntimeException('periodic is not implemented by the queued stream executor.');
     }
 
     public function defer(Scopeable|Executable|Closure $task): void
     {
-        throw new RuntimeException('defer is not implemented by the C6 queued executor.');
+        throw new RuntimeException('defer is not implemented by the queued stream executor.');
     }
 
     public function singleflight(string $key, Scopeable|Executable|Closure $task): mixed
     {
-        throw new RuntimeException('singleflight is not implemented by the C6 queued executor.');
+        throw new RuntimeException('singleflight is not implemented by the queued stream executor.');
     }
 
     public function inWorker(WorkerTask $task): mixed
     {
-        throw new RuntimeException('inWorker is not implemented by the C6 queued executor.');
+        throw new RuntimeException('inWorker is not implemented by the queued stream executor.');
     }
 
     /** @return array<string|int, mixed> */
     public function parallel(WorkerTask ...$tasks): array
     {
-        throw new RuntimeException('parallel is not implemented by the C6 queued executor.');
+        throw new RuntimeException('parallel is not implemented by the queued stream executor.');
     }
 
     public function settleParallel(WorkerTask ...$tasks): SettlementBag
     {
-        throw new RuntimeException('settleParallel is not implemented by the C6 queued executor.');
+        throw new RuntimeException('settleParallel is not implemented by the queued stream executor.');
     }
 
     /** @return array<string|int, mixed> */
     public function mapParallel(iterable $items, Closure $fn, int $limit = 10, ?Closure $onEach = null): array
     {
-        throw new RuntimeException('mapParallel is not implemented by the C6 queued executor.');
+        throw new RuntimeException('mapParallel is not implemented by the queued stream executor.');
     }
 
     private function runQueued(int $index): mixed
@@ -455,6 +554,20 @@ final class C6QueuedTaskExecutor implements TaskExecutor
             return $entry['cancelled'] ? null : $entry['task']();
         } finally {
             array_splice($this->tasks, $index, 1);
+        }
+    }
+
+    private function cancel(int $id): void
+    {
+        foreach ($this->tasks as $index => $task) {
+            if ($task['id'] !== $id || $task['cancelled']) {
+                continue;
+            }
+
+            $this->tasks[$index]['cancelled'] = true;
+            $this->cancelCount++;
+
+            return;
         }
     }
 }

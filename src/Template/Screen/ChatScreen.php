@@ -73,7 +73,7 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables
         $activity = $this->store->activity;
         $inputMode = $this->store->inputMode;
 
-        return StatusBar::new()
+        return StatusBar::new(theme: $ui->theme)
             ->section($inputMode->mode->label(), $inputMode->mode->color())
             ->left(sprintf('Chat  %s', $inputMode->focusTarget ?? ''))
             ->right(sprintf(

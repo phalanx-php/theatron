@@ -37,7 +37,7 @@ class SettingsScreen implements Screen, HasStatusBar
     {
         $mode = $this->store->inputMode->mode;
 
-        return StatusBar::new()
+        return StatusBar::new(theme: $ui->theme)
             ->section($mode->label(), $mode->color())
             ->left('Settings')
             ->render($ui);

@@ -55,7 +55,7 @@ class AgentBoardScreen implements Screen, HasStatusBar, HasFocusables, NormalMod
         $inputMode = $this->store->inputMode;
         $agentCount = count($this->store->agents->agents);
 
-        return StatusBar::new()
+        return StatusBar::new(theme: $ui->theme)
             ->section($inputMode->mode->label(), $inputMode->mode->color())
             ->left('Board')
             ->right(sprintf('Agents: %d', $agentCount))

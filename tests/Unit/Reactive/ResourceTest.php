@@ -5,14 +5,16 @@ declare(strict_types=1);
 namespace Phalanx\Theatron\Tests\Unit\Reactive;
 
 use Closure;
-use Phalanx\Cancellation\CancellationToken;
-use Phalanx\Runtime\RuntimeContext;
-use Phalanx\Scope\TaskScope;
-use Phalanx\Supervisor\WaitReason;
+use Phalanx\Cancellation\Cancelled;
+use Phalanx\Concurrency\RetryPolicy;
+use Phalanx\Concurrency\SettlementBag;
+use Phalanx\Scope\Subscription;
+use Phalanx\Scope\TaskExecutor;
+use Phalanx\Supervisor\TaskHandle;
 use Phalanx\Task\Executable;
 use Phalanx\Task\Scopeable;
 use Phalanx\Theatron\Reactive\Resource;
-use Phalanx\Trace\Trace;
+use Phalanx\Worker\WorkerTask;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -64,7 +66,7 @@ final class ResourceTest extends TestCase
     }
 
     #[Test]
-    public function generationCounterPreventsStaleResults(): void
+    public function repeatedRefreshesUseLatestResult(): void
     {
         $callCount = 0;
 
@@ -132,11 +134,11 @@ final class ResourceTest extends TestCase
     public function asyncSupersessionIgnoresStaleResultAndDirtyNotification(): void
     {
         $dirty = 0;
-        $scope = new QueuedResourceTaskScope();
+        $executor = new QueuedResourceTaskExecutor();
 
         $resource = new Resource(
             fetcher: static fn(string $key): string => "result-{$key}",
-            scope: $scope,
+            executor: $executor,
             onDirty: static function () use (&$dirty): void {
                 $dirty++;
             },
@@ -145,18 +147,19 @@ final class ResourceTest extends TestCase
         $resource->refresh('slow');
         $resource->refresh('fast');
 
-        self::assertSame(2, $scope->queuedCount());
+        self::assertSame(2, $executor->queuedCount());
+        self::assertSame(1, $executor->cancelCount());
         self::assertSame(2, $dirty);
         self::assertTrue($resource->loading);
 
-        $scope->runQueued(1);
+        $executor->runQueued(1);
 
         self::assertTrue($resource->ok);
         self::assertFalse($resource->loading);
         self::assertSame('result-fast', $resource->value);
         self::assertSame(3, $dirty);
 
-        $scope->runQueued(0);
+        $executor->runQueued(0);
 
         self::assertSame('result-fast', $resource->value);
         self::assertSame(3, $dirty);
@@ -166,11 +169,11 @@ final class ResourceTest extends TestCase
     public function disposeBeforeAsyncCompletionPreventsWritesAndDirtyNotification(): void
     {
         $dirty = 0;
-        $scope = new QueuedResourceTaskScope();
+        $executor = new QueuedResourceTaskExecutor();
 
         $resource = new Resource(
             fetcher: static fn(): string => 'late-result',
-            scope: $scope,
+            executor: $executor,
             onDirty: static function () use (&$dirty): void {
                 $dirty++;
             },
@@ -181,8 +184,9 @@ final class ResourceTest extends TestCase
 
         self::assertFalse($resource->loading);
         self::assertSame(1, $dirty);
+        self::assertSame(1, $executor->cancelCount());
 
-        $scope->runQueued(0);
+        $executor->runQueued(0);
 
         self::assertFalse($resource->ok);
         self::assertFalse($resource->loading);
@@ -250,7 +254,7 @@ final class ResourceTest extends TestCase
     public function asyncStreamSupersessionIgnoresStaleChunksCompletionAndDirtyNotifications(): void
     {
         $dirty = 0;
-        $scope = new QueuedResourceTaskScope();
+        $executor = new QueuedResourceTaskExecutor();
 
         $resource = new Resource(
             fetcher: static fn(string $key): iterable => match ($key) {
@@ -258,7 +262,7 @@ final class ResourceTest extends TestCase
                 'fast' => ['fresh ', 'stream'],
                 default => throw new RuntimeException("Unexpected stream key {$key}."),
             },
-            scope: $scope,
+            executor: $executor,
             onDirty: static function () use (&$dirty): void {
                 $dirty++;
             },
@@ -267,12 +271,13 @@ final class ResourceTest extends TestCase
         $resource->stream('slow');
         $resource->stream('fast');
 
-        self::assertSame(2, $scope->queuedCount());
+        self::assertSame(2, $executor->queuedCount());
+        self::assertSame(1, $executor->cancelCount());
         self::assertSame(2, $dirty);
         self::assertSame('', $resource->buffer);
         self::assertTrue($resource->loading);
 
-        $scope->runQueued(1);
+        $executor->runQueued(1);
 
         self::assertTrue($resource->ok);
         self::assertFalse($resource->loading);
@@ -280,7 +285,7 @@ final class ResourceTest extends TestCase
         self::assertSame('fresh stream', $resource->value);
         self::assertSame(5, $dirty);
 
-        $scope->runQueued(0);
+        $executor->runQueued(0);
 
         self::assertSame('fresh stream', $resource->buffer);
         self::assertSame('fresh stream', $resource->value);
@@ -291,11 +296,11 @@ final class ResourceTest extends TestCase
     public function disposeBeforeAsyncStreamCompletionPreventsWritesAndDirtyNotification(): void
     {
         $dirty = 0;
-        $scope = new QueuedResourceTaskScope();
+        $executor = new QueuedResourceTaskExecutor();
 
         $resource = new Resource(
             fetcher: static fn(): iterable => ['late ', 'stream'],
-            scope: $scope,
+            executor: $executor,
             onDirty: static function () use (&$dirty): void {
                 $dirty++;
             },
@@ -307,8 +312,9 @@ final class ResourceTest extends TestCase
         self::assertFalse($resource->loading);
         self::assertSame('', $resource->buffer);
         self::assertSame(1, $dirty);
+        self::assertSame(1, $executor->cancelCount());
 
-        $scope->runQueued(0);
+        $executor->runQueued(0);
 
         self::assertFalse($resource->ok);
         self::assertFalse($resource->loading);
@@ -353,6 +359,69 @@ final class ResourceTest extends TestCase
     }
 
     #[Test]
+    public function streamNotifiesSubscribers(): void
+    {
+        $calls = 0;
+
+        $resource = new Resource(
+            fetcher: static fn(): iterable => ['a', 'b'],
+        );
+        $subscription = $resource->subscribe(static function () use (&$calls): void {
+            $calls++;
+        });
+
+        $resource->stream();
+
+        self::assertFalse($subscription->isDisposed);
+        self::assertSame(4, $calls);
+
+        $subscription->dispose();
+        $resource->stream();
+
+        self::assertTrue($subscription->isDisposed);
+        self::assertSame(4, $calls);
+    }
+
+    #[Test]
+    public function nonStaticSubscriberThrows(): void
+    {
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Resource subscribers must be static closures.');
+
+        $resource = new Resource(
+            fetcher: static fn(): string => 'data',
+        );
+
+        $resource->subscribe(function (): void {
+        });
+    }
+
+    #[Test]
+    public function cancelledRefreshIsNotCapturedAsResourceError(): void
+    {
+        $dirty = 0;
+        $resource = new Resource(
+            fetcher: static function (): never {
+                throw new Cancelled('test cancel');
+            },
+            onDirty: static function () use (&$dirty): void {
+                $dirty++;
+            },
+        );
+
+        try {
+            $resource->refresh();
+            self::fail('Expected resource refresh cancellation to be rethrown.');
+        } catch (Cancelled $e) {
+            self::assertSame('test cancel', $e->getMessage());
+        }
+
+        self::assertFalse($resource->loading);
+        self::assertNull($resource->error);
+        self::assertSame(2, $dirty);
+    }
+
+    #[Test]
     public function refreshClearsPreviousStreamBuffer(): void
     {
         $calls = 0;
@@ -376,6 +445,77 @@ final class ResourceTest extends TestCase
         self::assertFalse($resource->loading);
         self::assertSame('', $resource->buffer);
         self::assertSame('fresh scalar', $resource->value);
+    }
+
+    #[Test]
+    public function startedStreamSupersessionCancelsPreviousTaskAndRejectsFurtherChunks(): void
+    {
+        $dirty = 0;
+        $executor = new QueuedResourceTaskExecutor();
+        $resource = null;
+
+        $resource = new Resource(
+            fetcher: static function (string $key) use (&$resource): iterable {
+                if ($key === 'slow') {
+                    yield 'stale ';
+                    $resource?->stream('fast');
+                    yield 'ignored';
+                    return;
+                }
+
+                yield 'fresh';
+            },
+            executor: $executor,
+            onDirty: static function () use (&$dirty): void {
+                $dirty++;
+            },
+        );
+
+        $resource->stream('slow');
+        $executor->runQueued(0);
+
+        self::assertSame(1, $executor->queuedCount());
+        self::assertSame(1, $executor->cancelCount());
+        self::assertTrue($resource->loading);
+        self::assertSame('', $resource->buffer);
+
+        $executor->runQueued(0);
+
+        self::assertTrue($resource->ok);
+        self::assertFalse($resource->loading);
+        self::assertSame('fresh', $resource->buffer);
+        self::assertSame('fresh', $resource->value);
+        self::assertSame(5, $dirty);
+    }
+
+    #[Test]
+    public function startedStreamDisposeCancelsTaskAndRejectsFurtherChunks(): void
+    {
+        $dirty = 0;
+        $executor = new QueuedResourceTaskExecutor();
+        $resource = null;
+
+        $resource = new Resource(
+            fetcher: static function () use (&$resource): iterable {
+                yield 'partial';
+                $resource?->dispose();
+                yield 'ignored';
+            },
+            executor: $executor,
+            onDirty: static function () use (&$dirty): void {
+                $dirty++;
+            },
+        );
+
+        $resource->stream();
+        $executor->runQueued(0);
+
+        self::assertSame(1, $executor->cancelCount());
+        self::assertFalse($resource->ok);
+        self::assertFalse($resource->loading);
+        self::assertSame('partial', $resource->buffer);
+        self::assertNull($resource->value);
+        self::assertSame(2, $dirty);
     }
 
     #[Test]
@@ -433,96 +573,151 @@ final class ResourceTest extends TestCase
     }
 }
 
-final class QueuedResourceTaskScope implements TaskScope
+final class QueuedResourceTaskExecutor implements TaskExecutor
 {
-    public bool $isCancelled {
-        get => $this->token->isCancelled;
-    }
-
-    public RuntimeContext $runtime {
-        get => throw new RuntimeException('Runtime is not implemented by the queued resource test scope.');
-    }
-
-    /** @var list<Scopeable|Executable|Closure> */
+    /** @var list<array{task: Closure, cancelled: bool}> */
     private array $tasks = [];
 
-    /** @var list<Closure(): void> */
-    private array $disposeCallbacks = [];
-
-    private CancellationToken $token;
-
-    public function __construct()
-    {
-        $this->token = CancellationToken::create();
-    }
+    private int $cancelCount = 0;
 
     public function queuedCount(): int
     {
         return count($this->tasks);
     }
 
+    public function cancelCount(): int
+    {
+        return $this->cancelCount;
+    }
+
     public function runQueued(int $index): mixed
     {
-        $task = $this->tasks[$index] ?? throw new RuntimeException("No queued task at index {$index}.");
-        array_splice($this->tasks, $index, 1);
+        $entry = $this->tasks[$index] ?? throw new RuntimeException("No queued task at index {$index}.");
 
-        if (!$task instanceof Closure) {
-            throw new RuntimeException('Queued resource test scope only executes closures.');
+        if ($entry['cancelled']) {
+            array_splice($this->tasks, $index, 1);
+
+            return null;
         }
 
-        return $task();
-    }
-
-    public function call(Closure $fn, ?WaitReason $waitReason = null): mixed
-    {
-        return $fn();
-    }
-
-    public function throwIfCancelled(): void
-    {
-        $this->token->throwIfCancelled();
-    }
-
-    public function cancellation(): CancellationToken
-    {
-        return $this->token;
-    }
-
-    public function onDispose(Closure $callback): void
-    {
-        $this->disposeCallbacks[] = $callback;
-    }
-
-    public function dispose(): void
-    {
-        $callbacks = array_reverse($this->disposeCallbacks);
-        $this->disposeCallbacks = [];
-        $this->token->cancel();
-
-        foreach ($callbacks as $callback) {
-            $callback();
+        try {
+            return $entry['task']();
+        } finally {
+            array_splice($this->tasks, $index, 1);
         }
     }
 
-    public function service(string $type): object
+    public function go(Closure $fn, ?string $name = null): TaskHandle
     {
-        throw new RuntimeException("Service {$type} is not implemented by the queued resource test scope.");
+        $index = count($this->tasks);
+        $this->tasks[] = [
+            'task' => $fn,
+            'cancelled' => false,
+        ];
+        $tasks = &$this->tasks;
+        $cancelCount = &$this->cancelCount;
+
+        return new TaskHandle(
+            id: "queued-resource-task-{$index}",
+            name: $name ?? 'queued-resource-task',
+            cancel: static function () use (&$tasks, &$cancelCount, $index): void {
+                if (!isset($tasks[$index]) || $tasks[$index]['cancelled']) {
+                    return;
+                }
+
+                $tasks[$index]['cancelled'] = true;
+                $cancelCount++;
+            },
+            snapshot: static fn(): null => null,
+        );
     }
 
-    public function trace(): Trace
+    /** @return array<string|int, mixed> */
+    public function concurrent(Scopeable|Executable|Closure ...$tasks): array
     {
-        throw new RuntimeException('Trace is not implemented by the queued resource test scope.');
+        throw new RuntimeException('concurrent is not implemented by the queued resource test executor.');
     }
 
-    public function execute(Scopeable|Executable|Closure $task): mixed
+    public function race(Scopeable|Executable|Closure ...$tasks): mixed
     {
-        $this->tasks[] = $task;
-
-        return null;
+        throw new RuntimeException('race is not implemented by the queued resource test executor.');
     }
 
-    public function executeFresh(Scopeable|Executable|Closure $task): mixed
+    public function any(Scopeable|Executable|Closure ...$tasks): mixed
     {
-        return $this->execute($task);
+        throw new RuntimeException('any is not implemented by the queued resource test executor.');
+    }
+
+    public function map(iterable $items, Closure $fn, int $limit = 10, ?Closure $onEach = null): array
+    {
+        throw new RuntimeException('map is not implemented by the queued resource test executor.');
+    }
+
+    /** @return array<string|int, mixed> */
+    public function series(Scopeable|Executable|Closure ...$tasks): array
+    {
+        throw new RuntimeException('series is not implemented by the queued resource test executor.');
+    }
+
+    public function waterfall(Scopeable|Executable|Closure ...$tasks): mixed
+    {
+        throw new RuntimeException('waterfall is not implemented by the queued resource test executor.');
+    }
+
+    public function settle(Scopeable|Executable|Closure ...$tasks): SettlementBag
+    {
+        throw new RuntimeException('settle is not implemented by the queued resource test executor.');
+    }
+
+    public function timeout(float $seconds, Scopeable|Executable|Closure $task): mixed
+    {
+        throw new RuntimeException('timeout is not implemented by the queued resource test executor.');
+    }
+
+    public function retry(Scopeable|Executable|Closure $task, RetryPolicy $policy): mixed
+    {
+        throw new RuntimeException('retry is not implemented by the queued resource test executor.');
+    }
+
+    public function delay(float $seconds): void
+    {
+        throw new RuntimeException('delay is not implemented by the queued resource test executor.');
+    }
+
+    public function periodic(float $interval, Closure $tick): Subscription
+    {
+        throw new RuntimeException('periodic is not implemented by the queued resource test executor.');
+    }
+
+    public function defer(Scopeable|Executable|Closure $task): void
+    {
+        throw new RuntimeException('defer is not implemented by the queued resource test executor.');
+    }
+
+    public function singleflight(string $key, Scopeable|Executable|Closure $task): mixed
+    {
+        throw new RuntimeException('singleflight is not implemented by the queued resource test executor.');
+    }
+
+    public function inWorker(WorkerTask $task): mixed
+    {
+        throw new RuntimeException('inWorker is not implemented by the queued resource test executor.');
+    }
+
+    /** @return array<string|int, mixed> */
+    public function parallel(WorkerTask ...$tasks): array
+    {
+        throw new RuntimeException('parallel is not implemented by the queued resource test executor.');
+    }
+
+    public function settleParallel(WorkerTask ...$tasks): SettlementBag
+    {
+        throw new RuntimeException('settleParallel is not implemented by the queued resource test executor.');
+    }
+
+    /** @return array<string|int, mixed> */
+    public function mapParallel(iterable $items, Closure $fn, int $limit = 10, ?Closure $onEach = null): array
+    {
+        throw new RuntimeException('mapParallel is not implemented by the queued resource test executor.');
     }
 }

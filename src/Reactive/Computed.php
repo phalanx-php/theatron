@@ -37,7 +37,7 @@ final class Computed
     /** @var array<int, Closure(): void> */
     private array $subscribers = [];
 
-    /** @var list<SignalSubscription|ComputedSubscription> */
+    /** @var list<SignalSubscription|ComputedSubscription|ResourceSubscription> */
     private array $depSubscriptions = [];
 
     public function __construct(
@@ -137,6 +137,12 @@ final class Computed
                     },
                 );
             } elseif ($dep instanceof self) {
+                $this->depSubscriptions[] = $dep->subscribe(
+                    static function () use ($weakSelf): void {
+                        $weakSelf->get()?->markDirty();
+                    },
+                );
+            } elseif ($dep instanceof Resource) {
                 $this->depSubscriptions[] = $dep->subscribe(
                     static function () use ($weakSelf): void {
                         $weakSelf->get()?->markDirty();

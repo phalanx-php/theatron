@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Phalanx\Theatron\Tests\Unit\Reactive;
 
+use Phalanx\Theatron\Reactive\Resource;
 use Phalanx\Theatron\Reactive\Signal;
 use Phalanx\Theatron\Reactive\Tracker;
 use Phalanx\Theatron\Reactive\Watch;
@@ -108,6 +109,28 @@ final class WatchTest extends TestCase
         $sig->set(2);
 
         self::assertSame(1, $effectCount);
+
+        unset($watch);
+    }
+
+    #[Test]
+    public function firesEffectOnResourceChange(): void
+    {
+        $resource = new Resource(
+            fetcher: static fn(): iterable => ['streamed'],
+        );
+        $fired = 0;
+
+        $watch = new Watch(
+            static fn(): string => $resource->buffer,
+            static function () use (&$fired): void {
+                $fired++;
+            },
+        );
+
+        $resource->stream();
+
+        self::assertSame(1, $fired);
 
         unset($watch);
     }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Phalanx\Theatron\Tests\Unit\Reactive;
 
 use Phalanx\Theatron\Reactive\Computed;
+use Phalanx\Theatron\Reactive\Resource;
 use Phalanx\Theatron\Reactive\Signal;
 use Phalanx\Theatron\Reactive\Tracker;
 use PHPUnit\Framework\Attributes\Test;
@@ -136,6 +137,22 @@ final class ComputedTest extends TestCase
 
         $sig->set(5);
         self::assertSame(25, $c->value);
+    }
+
+    #[Test]
+    public function resourceDependencyRecomputes(): void
+    {
+        $resource = new Resource(
+            fetcher: static fn(): iterable => ['streamed'],
+        );
+
+        $computed = new Computed(static fn(): string => $resource->buffer);
+
+        self::assertSame('', $computed->value);
+
+        $resource->stream();
+
+        self::assertSame('streamed', $computed->value);
     }
 
     #[Test]

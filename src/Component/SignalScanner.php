@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Phalanx\Theatron\Component;
 
 use Phalanx\Theatron\Reactive\DirtyBatch;
+use Phalanx\Theatron\Reactive\Resource;
 use Phalanx\Theatron\Reactive\Signal;
 use Phalanx\Theatron\Reactive\SignalRegistry;
 use Phalanx\Theatron\State\Store;
@@ -55,6 +56,15 @@ final class SignalScanner
                     $ownedSignals[] = $value;
                     $registry?->register($value, $ref->getShortName() . '::' . $prop->getName());
                 }
+            } elseif ($typeName === Resource::class) {
+                $value = $prop->getValue($component);
+                if (!$value instanceof Resource) {
+                    continue;
+                }
+
+                $subscriptions[] = $value->subscribe(static function () use ($batch): void {
+                    $batch->request();
+                });
             } elseif (is_a($typeName, Store::class, true)) {
                 $value = $prop->getValue($component);
                 if (!$value instanceof Store) {

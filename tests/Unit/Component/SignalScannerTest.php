@@ -6,6 +6,7 @@ namespace Phalanx\Theatron\Tests\Unit\Component;
 
 use Phalanx\Theatron\Component\SignalScanner;
 use Phalanx\Theatron\Reactive\DirtyBatch;
+use Phalanx\Theatron\Reactive\Resource;
 use Phalanx\Theatron\Reactive\Signal;
 use Phalanx\Theatron\Reactive\SignalRegistry;
 use PHPUnit\Framework\Attributes\Test;
@@ -45,6 +46,27 @@ final class SignalScannerTest extends TestCase
         self::assertFalse($batch->isDirty);
 
         $component->count->set(42);
+
+        self::assertTrue($batch->isDirty);
+        self::assertCount(1, $result->subscriptions);
+    }
+
+    #[Test]
+    public function subscribesResourcesToDirtyBatch(): void
+    {
+        $component = new class (new Resource(static fn(): iterable => ['hello'])) {
+            public function __construct(
+                private(set) Resource $reply,
+            ) {
+            }
+        };
+
+        $batch = new DirtyBatch();
+        $result = SignalScanner::scan($component, $batch);
+
+        self::assertFalse($batch->isDirty);
+
+        $component->reply->stream();
 
         self::assertTrue($batch->isDirty);
         self::assertCount(1, $result->subscriptions);

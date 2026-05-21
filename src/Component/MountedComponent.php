@@ -10,6 +10,7 @@ use Phalanx\Theatron\Contract\Disposable as TheatronDisposable;
 use Phalanx\Theatron\Contract\Mountable;
 use Phalanx\Theatron\Contract\Styled;
 use Phalanx\Theatron\Reactive\DirtyBatch;
+use Phalanx\Theatron\Reactive\ResourceSubscription;
 use Phalanx\Theatron\Reactive\Signal;
 use Phalanx\Theatron\Reactive\SignalSubscription;
 use Phalanx\Theatron\Reactive\Tracker;
@@ -46,7 +47,7 @@ final class MountedComponent implements Renderable
     /** @var list<Signal> */
     private array $ownedSignals;
 
-    /** @var list<SignalSubscription> */
+    /** @var list<SignalSubscription|ResourceSubscription> */
     private array $subscriptions;
 
     /** @var list<StoreSubscription> */

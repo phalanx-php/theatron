@@ -5,25 +5,58 @@ declare(strict_types=1);
 namespace Phalanx\Theatron\Reactive;
 
 use Closure;
-use Phalanx\Scope\TaskScope;
+use Phalanx\Cancellation\Cancelled;
+use Phalanx\Scope\TaskExecutor;
+use Phalanx\Supervisor\TaskHandle;
 use ReflectionFunction;
 use RuntimeException;
 use Throwable;
+use WeakReference;
 
 final class Resource
 {
-    private(set) bool $loading = false;
-    private(set) mixed $value = null;
-    private(set) ?Throwable $error = null;
-    private(set) bool $ok = false;
-    private(set) string $buffer = '';
+    /** tracked: records Resource reads for render/computed dependencies. */
+    public bool $loading {
+        get => $this->readLoading();
+    }
+
+    /** tracked: records Resource reads for render/computed dependencies. */
+    public mixed $value {
+        get => $this->readValue();
+    }
+
+    /** tracked: records Resource reads for render/computed dependencies. */
+    public ?Throwable $error {
+        get => $this->readError();
+    }
+
+    /** tracked: records Resource reads for render/computed dependencies. */
+    public bool $ok {
+        get => $this->readOk();
+    }
+
+    /** tracked: records Resource reads for render/computed dependencies. */
+    public string $buffer {
+        get => $this->readBuffer();
+    }
 
     private bool $disposed = false;
     private int $generation = 0;
+    private int $nextSubscriberId = 0;
+    private bool $loadingValue = false;
+    private mixed $storedValue = null;
+    private ?Throwable $storedError = null;
+    private bool $okValue = false;
+    private string $bufferValue = '';
+
+    private ?TaskHandle $currentTask = null;
+
+    /** @var array<int, Closure(): void> */
+    private array $subscribers = [];
 
     public function __construct(
         private Closure $fetcher,
-        private ?TaskScope $scope = null,
+        private ?TaskExecutor $executor = null,
         private ?Closure $onDirty = null,
     ) {
         if (!new ReflectionFunction($fetcher)->isStatic()) {
@@ -41,15 +74,16 @@ final class Resource
             return;
         }
 
-        $this->loading = true;
-        $this->error = null;
-        $this->buffer = '';
-        $this->onDirty?->__invoke();
+        $this->cancelCurrentTask();
+        $this->loadingValue = true;
+        $this->storedError = null;
+        $this->bufferValue = '';
+        $this->notify();
 
         $gen = ++$this->generation;
         $fetcher = $this->fetcher;
 
-        if ($this->scope !== null) {
+        if ($this->executor !== null) {
             $this->fetchAsync($gen, $key, $fetcher);
         } else {
             $this->fetchSync($gen, $key, $fetcher);
@@ -62,19 +96,41 @@ final class Resource
             return;
         }
 
-        $this->loading = true;
-        $this->error = null;
-        $this->buffer = '';
-        $this->onDirty?->__invoke();
+        $this->cancelCurrentTask();
+        $this->loadingValue = true;
+        $this->storedError = null;
+        $this->bufferValue = '';
+        $this->notify();
 
         $gen = ++$this->generation;
         $fetcher = $this->fetcher;
 
-        if ($this->scope !== null) {
+        if ($this->executor !== null) {
             $this->streamAsync($gen, $key, $fetcher);
         } else {
             $this->streamSync($gen, $key, $fetcher);
         }
+    }
+
+    public function subscribe(Closure $subscriber): ResourceSubscription
+    {
+        if ($this->disposed) {
+            throw new RuntimeException('Cannot subscribe to a disposed resource.');
+        }
+
+        if (!new ReflectionFunction($subscriber)->isStatic()) {
+            throw new RuntimeException('Resource subscribers must be static closures.');
+        }
+
+        $id = $this->nextSubscriberId++;
+        $this->subscribers[$id] = $subscriber;
+
+        return new ResourceSubscription($this, $id);
+    }
+
+    public function unsubscribe(int $id): void
+    {
+        unset($this->subscribers[$id]);
     }
 
     public function dispose(): void
@@ -83,20 +139,25 @@ final class Resource
             return;
         }
 
+        $this->cancelCurrentTask();
         $this->disposed = true;
-        $this->loading = false;
+        $this->loadingValue = false;
         $this->generation++;
+        $this->subscribers = [];
     }
 
     private function fetchSync(int $gen, mixed $key, Closure $fetcher): void
     {
         try {
             $result = $fetcher($key);
+        } catch (Cancelled $e) {
+            $this->handleCancelled($gen);
+            throw $e;
         } catch (Throwable $e) {
             if ($this->generation === $gen && !$this->disposed) {
-                $this->error = $e;
-                $this->loading = false;
-                $this->onDirty?->__invoke();
+                $this->storedError = $e;
+                $this->loadingValue = false;
+                $this->notify();
             }
 
             return;
@@ -106,29 +167,33 @@ final class Resource
             return;
         }
 
-        $this->value = $result;
-        $this->ok = true;
-        $this->loading = false;
-        $this->onDirty?->__invoke();
+        $this->storedValue = $result;
+        $this->okValue = true;
+        $this->loadingValue = false;
+        $this->notify();
     }
 
     private function fetchAsync(int $gen, mixed $key, Closure $fetcher): void
     {
-        if ($this->scope === null) {
+        if ($this->executor === null) {
             return;
         }
 
-        $weakSelf = \WeakReference::create($this);
+        $weakSelf = WeakReference::create($this);
 
-        $this->scope->execute(static function () use ($weakSelf, $gen, $key, $fetcher): void {
+        $this->currentTask = $this->executor->go(static function () use ($weakSelf, $gen, $key, $fetcher): void {
             try {
                 $result = $fetcher($key);
+            } catch (Cancelled $e) {
+                $weakSelf->get()?->handleCancelled($gen);
+                throw $e;
             } catch (Throwable $e) {
                 $self = $weakSelf->get();
                 if ($self !== null && $self->generation === $gen && !$self->disposed) {
-                    $self->error = $e;
-                    $self->loading = false;
-                    $self->onDirty?->__invoke();
+                    $self->storedError = $e;
+                    $self->loadingValue = false;
+                    $self->currentTask = null;
+                    $self->notify();
                 }
 
                 return;
@@ -139,22 +204,26 @@ final class Resource
                 return;
             }
 
-            $self->value = $result;
-            $self->ok = true;
-            $self->loading = false;
-            $self->onDirty?->__invoke();
-        });
+            $self->storedValue = $result;
+            $self->okValue = true;
+            $self->loadingValue = false;
+            $self->currentTask = null;
+            $self->notify();
+        }, 'theatron.resource.refresh');
     }
 
     private function streamSync(int $gen, mixed $key, Closure $fetcher): void
     {
         try {
             $this->consumeStream($gen, $fetcher($key));
+        } catch (Cancelled $e) {
+            $this->handleCancelled($gen);
+            throw $e;
         } catch (Throwable $e) {
             if ($this->generation === $gen && !$this->disposed) {
-                $this->error = $e;
-                $this->loading = false;
-                $this->onDirty?->__invoke();
+                $this->storedError = $e;
+                $this->loadingValue = false;
+                $this->notify();
             }
 
             return;
@@ -164,21 +233,21 @@ final class Resource
             return;
         }
 
-        $this->value = $this->buffer;
-        $this->ok = true;
-        $this->loading = false;
-        $this->onDirty?->__invoke();
+        $this->storedValue = $this->bufferValue;
+        $this->okValue = true;
+        $this->loadingValue = false;
+        $this->notify();
     }
 
     private function streamAsync(int $gen, mixed $key, Closure $fetcher): void
     {
-        if ($this->scope === null) {
+        if ($this->executor === null) {
             return;
         }
 
-        $weakSelf = \WeakReference::create($this);
+        $weakSelf = WeakReference::create($this);
 
-        $this->scope->execute(static function () use ($weakSelf, $gen, $key, $fetcher): void {
+        $this->currentTask = $this->executor->go(static function () use ($weakSelf, $gen, $key, $fetcher): void {
             $self = $weakSelf->get();
             if ($self === null || $self->generation !== $gen || $self->disposed) {
                 return;
@@ -186,12 +255,16 @@ final class Resource
 
             try {
                 $self->consumeStream($gen, $fetcher($key));
+            } catch (Cancelled $e) {
+                $weakSelf->get()?->handleCancelled($gen);
+                throw $e;
             } catch (Throwable $e) {
                 $self = $weakSelf->get();
                 if ($self !== null && $self->generation === $gen && !$self->disposed) {
-                    $self->error = $e;
-                    $self->loading = false;
-                    $self->onDirty?->__invoke();
+                    $self->storedError = $e;
+                    $self->loadingValue = false;
+                    $self->currentTask = null;
+                    $self->notify();
                 }
 
                 return;
@@ -202,11 +275,12 @@ final class Resource
                 return;
             }
 
-            $self->value = $self->buffer;
-            $self->ok = true;
-            $self->loading = false;
-            $self->onDirty?->__invoke();
-        });
+            $self->storedValue = $self->bufferValue;
+            $self->okValue = true;
+            $self->loadingValue = false;
+            $self->currentTask = null;
+            $self->notify();
+        }, 'theatron.resource.stream');
     }
 
     private function consumeStream(int $gen, mixed $stream): void
@@ -224,8 +298,76 @@ final class Resource
                 throw new RuntimeException('Resource stream chunks must be strings.');
             }
 
-            $this->buffer .= $chunk;
-            $this->onDirty?->__invoke();
+            $this->bufferValue .= $chunk;
+            $this->notify();
+        }
+    }
+
+    private function readLoading(): bool
+    {
+        Tracker::recordAccess($this);
+
+        return $this->loadingValue;
+    }
+
+    private function readValue(): mixed
+    {
+        Tracker::recordAccess($this);
+
+        return $this->storedValue;
+    }
+
+    private function readError(): ?Throwable
+    {
+        Tracker::recordAccess($this);
+
+        return $this->storedError;
+    }
+
+    private function readOk(): bool
+    {
+        Tracker::recordAccess($this);
+
+        return $this->okValue;
+    }
+
+    private function readBuffer(): string
+    {
+        Tracker::recordAccess($this);
+
+        return $this->bufferValue;
+    }
+
+    private function cancelCurrentTask(): void
+    {
+        if ($this->currentTask === null) {
+            return;
+        }
+
+        $task = $this->currentTask;
+        $this->currentTask = null;
+        $task->cancel();
+    }
+
+    private function handleCancelled(int $gen): void
+    {
+        if ($this->generation !== $gen || $this->disposed) {
+            return;
+        }
+
+        $this->loadingValue = false;
+        $this->currentTask = null;
+        $this->notify();
+    }
+
+    private function notify(): void
+    {
+        $this->onDirty?->__invoke();
+
+        $snapshot = $this->subscribers;
+
+        foreach ($snapshot as $subscriber) {
+            $subscriber();
         }
     }
 }

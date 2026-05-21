@@ -15,7 +15,7 @@ final class Watch
     private bool $running = false;
     private mixed $lastValue;
 
-    /** @var list<SignalSubscription|ComputedSubscription> */
+    /** @var list<SignalSubscription|ComputedSubscription|ResourceSubscription> */
     private array $depSubscriptions = [];
 
     public function __construct(
@@ -79,6 +79,12 @@ final class Watch
                     },
                 );
             } elseif ($dep instanceof Computed) {
+                $this->depSubscriptions[] = $dep->subscribe(
+                    static function () use ($weakSelf): void {
+                        $weakSelf->get()?->check();
+                    },
+                );
+            } elseif ($dep instanceof Resource) {
                 $this->depSubscriptions[] = $dep->subscribe(
                     static function () use ($weakSelf): void {
                         $weakSelf->get()?->check();

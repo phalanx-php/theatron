@@ -13,29 +13,28 @@ final class MetricsTest extends TestCase
     #[Test]
     public function memoryFormatsBelowOneMegabyteAsKilobytes(): void
     {
-        self::assertSame('1.0K', Metrics::memory(1024));
-        self::assertSame('0.5K', Metrics::memory(512));
+        self::assertSame('1.0 KB', Metrics::memory(1024));
+        self::assertSame('512 B', Metrics::memory(512));
     }
 
     #[Test]
-    public function memoryFormatsOneMegabyteAndAboveAsMegabytes(): void
+    public function memoryFormatsLargeValuesAsKilobytes(): void
     {
-        self::assertSame('1.0M', Metrics::memory(1_048_576));
-        self::assertSame('2.5M', Metrics::memory(2 * 1_048_576 + 524_288));
+        self::assertSame('1,024.0 KB', Metrics::memory(1_048_576));
+        self::assertSame('2,560.0 KB', Metrics::memory(2 * 1_048_576 + 524_288));
     }
 
     #[Test]
     public function memoryDeltaPrefixesPlusForNonNegative(): void
     {
-        self::assertSame('+1.0K', Metrics::memoryDelta(1024));
-        self::assertSame('+0.0K', Metrics::memoryDelta(0));
+        self::assertSame('+1.0 KB', Metrics::memoryDelta(1024));
+        self::assertSame('+0 B', Metrics::memoryDelta(0));
     }
 
     #[Test]
     public function memoryDeltaNegativeOmitsSign(): void
     {
-        // sign is the empty string for negative; abs() strips the minus before formatting
-        self::assertSame('1.0K', Metrics::memoryDelta(-1024));
+        self::assertSame('1.0 KB', Metrics::memoryDelta(-1024));
     }
 
     #[Test]
@@ -69,6 +68,6 @@ final class MetricsTest extends TestCase
     #[Test]
     public function memoryFormatsZeroBytes(): void
     {
-        self::assertSame('0.0K', Metrics::memory(0));
+        self::assertSame('0 B', Metrics::memory(0));
     }
 }

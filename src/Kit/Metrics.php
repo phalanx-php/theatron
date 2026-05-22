@@ -8,11 +8,11 @@ final class Metrics
 {
     public static function memory(int $bytes): string
     {
-        if ($bytes >= 1_048_576) {
-            return sprintf('%.1fM', $bytes / 1_048_576);
+        if ($bytes < 1024) {
+            return number_format($bytes) . ' B';
         }
 
-        return sprintf('%.1fK', $bytes / 1024);
+        return number_format($bytes / 1024, 1) . ' KB';
     }
 
     public static function memoryDelta(int $bytes): string

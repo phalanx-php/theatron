@@ -45,7 +45,7 @@ final class AgentExecutor implements AgentExecutorContract
             ),
         ]);
 
-        $result = ($this->activity)($this->scope, $this->agent, $this->config, $log);
+        $result = ($this->activity)($this->scope, $this->agent, $this->nextConfig(), $log);
 
         return $this->record($result);
     }
@@ -109,6 +109,17 @@ final class AgentExecutor implements AgentExecutorContract
                 scope: GrantScope::Once->value,
                 hazardCeiling: $hazard,
             ),
+        );
+    }
+
+    private function nextConfig(): Config
+    {
+        return new Config(
+            id: 'activity_' . Id::generate(),
+            context: $this->config->context,
+            maxInvocations: $this->config->maxInvocations,
+            timeoutSeconds: $this->config->timeoutSeconds,
+            hooks: $this->config->hooks,
         );
     }
 

@@ -39,6 +39,8 @@ registered directly on the same builder.
 ```php
 <?php
 
+use Phalanx\Iris\HttpServiceBundle;
+use Phalanx\Theatron\Agent\AthenaServiceBundle;
 use Phalanx\Theatron\Binding\Binding;
 use Phalanx\Theatron\Theatron;
 use Phalanx\Theatron\TheatronApp;
@@ -64,6 +66,8 @@ return Theatron::app($context)
     ])
     ->providers(
         static fn(TheatronApp $app): TheatronServiceBundle => new TheatronServiceBundle($app),
+        new HttpServiceBundle(),
+        AthenaServiceBundle::ollama(),
     )
     ->devtools()
     ->run();
@@ -72,6 +76,9 @@ return Theatron::app($context)
 `Theatron::app(...)` owns the Theatron app configuration and Aegis startup path.
 Runtime bundles are declared in the bootstrap. The Theatron bundle receives the
 built app, so it registers the same stage/store instances the renderer uses.
+The bundled app uses Ollama through Athena by default. Override
+`THEATRON_OLLAMA_BASE_URL`, `THEATRON_OLLAMA_MODEL`, or
+`THEATRON_MAX_INVOCATIONS` in the runtime context when needed.
 
 ## Components
 

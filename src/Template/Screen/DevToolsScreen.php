@@ -17,6 +17,7 @@ use Phalanx\Theatron\Contract\Screen;
 use Phalanx\Theatron\Input\Key;
 use Phalanx\Theatron\Input\KeyEvent;
 use Phalanx\Theatron\Input\NormalModeHandler;
+use Phalanx\Theatron\Kit\Metrics;
 use Phalanx\Theatron\Layout\Size;
 use Phalanx\Theatron\Navigation\Navigator;
 use Phalanx\Theatron\Reactive\SignalRegistry;
@@ -33,7 +34,6 @@ use Phalanx\Theatron\Text\Line;
 use Phalanx\Theatron\Text\Span;
 
 use function Phalanx\Theatron\Ui\column;
-use function Phalanx\Theatron\Ui\row;
 use function Phalanx\Theatron\Ui\text;
 
 class DevToolsScreen implements
@@ -217,19 +217,6 @@ class DevToolsScreen implements
         return TextStyle::new()->fg(Color::indexed(242));
     }
 
-    private static function bytes(int $bytes): string
-    {
-        if ($bytes < 1024) {
-            return "{$bytes} B";
-        }
-
-        if ($bytes < 1048576) {
-            return round($bytes / 1024, 1) . ' KB';
-        }
-
-        return round($bytes / 1048576, 1) . ' MB';
-    }
-
     private static function statusLabel(ActivityStatus $status): string
     {
         return match ($status) {
@@ -263,17 +250,13 @@ class DevToolsScreen implements
             DevToolsTab::Signals => column(...$this->signalRows($theme)),
             DevToolsTab::Tree => column(...$this->treeRows($theme)),
             DevToolsTab::Store => column(...$this->storeRows()),
-            DevToolsTab::Metrics => row(
-                column(...$this->metricRows()),
-                column(...$this->requestRows()),
-            ),
+            DevToolsTab::Metrics => column(...$this->metricRows()),
         };
     }
 
     private function requestsVisible(): bool
     {
-        return $this->store->devtools->activeTab === DevToolsTab::Metrics
-            || $this->store->devtools->activeTab === DevToolsTab::Requests;
+        return $this->store->devtools->activeTab === DevToolsTab::Requests;
     }
 
     /** @return list<Renderable> */
@@ -310,9 +293,11 @@ class DevToolsScreen implements
         $peakReal = memory_get_peak_usage(true);
         $peakZend = memory_get_peak_usage(false);
 
-        $rows[] = self::row(Line::from(Span::styled('  Memory (ZMM)', self::headerStyle())));
-        $rows[] = self::kv('heap used', self::bytes($memZend) . ' / ' . self::bytes($memReal));
-        $rows[] = self::kv('heap peak', self::bytes($peakZend) . ' / ' . self::bytes($peakReal));
+        $rows[] = self::row(Line::from(Span::styled('  Memory', self::headerStyle())));
+        $rows[] = self::kv('zmm used', Metrics::memory($memZend));
+        $rows[] = self::kv('real used', Metrics::memory($memReal));
+        $rows[] = self::kv('zmm peak', Metrics::memory($peakZend));
+        $rows[] = self::kv('real peak', Metrics::memory($peakReal));
         $rows[] = self::blank();
 
         $gc = gc_status();

@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Phalanx\Theatron\Tests\Unit\Template;
 
+use Phalanx\Iris\HttpServiceBundle;
 use Phalanx\Scope\ExecutionScope;
 use Phalanx\Scope\TaskScope;
 use Phalanx\Testing\PhalanxTestCase;
+use Phalanx\Theatron\Agent\AthenaServiceBundle;
 use Phalanx\Theatron\Binding\BindingAction;
 use Phalanx\Theatron\Binding\BindingRegistry;
 use Phalanx\Theatron\Component\MountSystem;
@@ -84,7 +86,8 @@ final class TemplateAppReadinessTest extends PhalanxTestCase
 
         self::assertSame(TemplateApp::screens(), $builder->registeredScreens());
         self::assertCount(3, $builder->registeredGlobalBindings());
-        self::assertCount(1, $builder->registeredProviders());
+        self::assertRegisteredProvider($builder->registeredProviders(), HttpServiceBundle::class);
+        self::assertRegisteredProvider($builder->registeredProviders(), AthenaServiceBundle::class);
         self::assertSame(AppStore::class, $builder->registeredStore());
         self::assertTrue($app->devtools);
         self::assertInstanceOf(SignalRegistry::class, $app->registry);
@@ -132,10 +135,11 @@ final class TemplateAppReadinessTest extends PhalanxTestCase
         self::assertStringContainsString('Signals', $devtoolsText);
         self::assertStringContainsString('Tree', $devtoolsText);
         self::assertStringContainsString('Store', $devtoolsText);
-        self::assertStringContainsString('POST /api/chat', $devtoolsText);
+        self::assertStringNotContainsString('POST /api/chat', $devtoolsText);
 
         self::assertTrue($devtools->handleNormalKey(new KeyEvent(Key::Right)));
         self::assertSame(DevToolsTab::Requests, $store->devtools->activeTab);
+        self::assertStringContainsString('POST /api/chat', self::flatten($devtools($context)));
         self::assertTrue($devtools->handleNormalKey(new KeyEvent(Key::Enter)));
         self::assertSame(LlmRequestDetailScreen::class, $navigator->lastScreen);
 
@@ -178,6 +182,8 @@ final class TemplateAppReadinessTest extends PhalanxTestCase
             ))
             ->providers(
                 static fn(TheatronApp $app): TheatronServiceBundle => new TheatronServiceBundle($app),
+                new HttpServiceBundle(),
+                AthenaServiceBundle::ollama(),
             )
             ->devtools();
     }
@@ -219,6 +225,18 @@ final class TemplateAppReadinessTest extends PhalanxTestCase
         }
 
         return implode('', array_map(static fn($span): string => $span->content, $content->spans));
+    }
+
+    /**
+     * @param list<mixed> $providers
+     * @param class-string $type
+     */
+    private static function assertRegisteredProvider(array $providers, string $type): void
+    {
+        self::assertNotFalse(array_find(
+            $providers,
+            static fn(mixed $provider): bool => $provider instanceof $type,
+        ));
     }
 }
 

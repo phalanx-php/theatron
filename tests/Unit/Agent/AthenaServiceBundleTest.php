@@ -4,16 +4,22 @@ declare(strict_types=1);
 
 namespace Phalanx\Theatron\Tests\Unit\Agent;
 
+use Phalanx\Athena\Activity\Config;
 use Phalanx\Athena\AthenaBundle;
 use Phalanx\Athena\AthenaConfig;
 use Phalanx\Athena\Router\InvocationRouter;
 use Phalanx\Boot\AppContext;
+use Phalanx\Panoply\Agent;
 use Phalanx\Service\ServiceBundle;
 use Phalanx\Service\ServiceCatalog;
 use Phalanx\Service\ServiceConfig;
 use Phalanx\Service\Services;
+use Phalanx\Theatron\Agent\AgentExecutor;
+use Phalanx\Theatron\Agent\AgentExecutorContract;
 use Phalanx\Theatron\Agent\AthenaServiceBundle;
 use Phalanx\Theatron\Agent\LlmRequestRecordingRouter;
+use Phalanx\Theatron\Agent\OllamaConfig;
+use Phalanx\Theatron\Agent\TemplateAgent;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -77,6 +83,30 @@ final class AthenaServiceBundleTest extends TestCase
 
         self::assertInstanceOf(AthenaConfig::class, $config);
         self::assertInstanceOf(LlmRequestRecordingRouter::class, $config->router);
+    }
+
+    #[Test]
+    public function ollamaServicesInstallDefaultAgentExecutorAndConfig(): void
+    {
+        $context = new AppContext([
+            'THEATRON_OLLAMA_BASE_URL' => 'http://example.test:11434',
+            'THEATRON_OLLAMA_MODEL' => 'llama3.1',
+            'THEATRON_MAX_INVOCATIONS' => '2',
+        ]);
+        $catalog = new ServiceCatalog($context);
+
+        AthenaServiceBundle::ollama()->services($catalog, $context);
+
+        $graph = $catalog->compile();
+        $config = $graph->contextConfig(OllamaConfig::class);
+
+        self::assertInstanceOf(OllamaConfig::class, $config);
+        self::assertSame('http://example.test:11434', $config->baseUrl);
+        self::assertSame('llama3.1', $config->model);
+        self::assertSame(2, $config->maxInvocations);
+        self::assertSame(TemplateAgent::class, $graph->alias(Agent::class));
+        self::assertSame(AgentExecutor::class, $graph->alias(AgentExecutorContract::class));
+        self::assertSame(Config::class, $graph->resolve(Config::class)->type);
     }
 
     private static function makeAthenaBundle(): AthenaBundle

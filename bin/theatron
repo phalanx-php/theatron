@@ -5,21 +5,21 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/vendor/autoload_runtime.php';
 
+use Phalanx\Iris\HttpServiceBundle;
+use Phalanx\Theatron\Agent\AthenaServiceBundle;
 use Phalanx\Theatron\Template\TemplateApp;
 use Phalanx\Theatron\Theatron;
 use Phalanx\Theatron\TheatronApp;
 use Phalanx\Theatron\TheatronServiceBundle;
 
-return static function (array $context): \Closure {
-    return static function () use ($context): int {
-        return Theatron::app($context)
-            ->store(TemplateApp::store())
-            ->screens(TemplateApp::screens())
-            ->globalBindings(TemplateApp::bindings())
-            ->providers(
-                static fn(TheatronApp $app): TheatronServiceBundle => new TheatronServiceBundle($app),
-            )
-            ->devtools()
-            ->run();
-    };
-};
+return static fn(array $context): \Closure => static fn(): int => Theatron::app($context)
+    ->store(TemplateApp::store())
+    ->screens(TemplateApp::screens())
+    ->globalBindings(TemplateApp::bindings())
+    ->providers(
+        static fn(TheatronApp $app): TheatronServiceBundle => new TheatronServiceBundle($app),
+        new HttpServiceBundle(),
+        AthenaServiceBundle::ollama(),
+    )
+    ->devtools()
+    ->run();

@@ -39,7 +39,7 @@ use PHPUnit\Framework\TestCase;
 final class DevToolsScreenTest extends TestCase
 {
     #[Test]
-    public function rendersStoreRuntimeAndLlmRequestColumns(): void
+    public function defaultMetricsTabRendersRuntimeWithoutLlmRequests(): void
     {
         $store = new AppStore();
         $store->requests = $store->requests->append($this->request('req-1', '/api/chat'));
@@ -57,8 +57,25 @@ final class DevToolsScreenTest extends TestCase
         self::assertStringContainsString('Signals', $text);
         self::assertStringContainsString('Tree', $text);
         self::assertStringContainsString('Store Slices', $text);
-        self::assertStringContainsString('Memory (ZMM)', $text);
+        self::assertStringContainsString('Memory', $text);
+        self::assertStringContainsString('zmm used', $text);
+        self::assertStringContainsString('real used', $text);
         self::assertStringContainsString('Runtime', $text);
+        self::assertStringNotContainsString('LLM Requests', $text);
+        self::assertStringNotContainsString('POST /api/chat', $text);
+    }
+
+    #[Test]
+    public function requestsTabRendersLlmRequests(): void
+    {
+        $store = new AppStore();
+        $store->devtools = $store->devtools->nextTab();
+        $store->requests = $store->requests->append($this->request('req-1', '/api/chat'));
+        $navigator = new RecordingNavigator();
+        $screen = new DevToolsScreen($store, new MountSystem($this->createStub(TaskScope::class)), $navigator);
+
+        $text = self::flatten($screen($this->makeContext($navigator)));
+
         self::assertStringContainsString('LLM Requests', $text);
         self::assertStringContainsString('POST /api/chat', $text);
     }
@@ -86,6 +103,7 @@ final class DevToolsScreenTest extends TestCase
     public function requestNavigationAndEnterOpenDetailPage(): void
     {
         $store = new AppStore();
+        $store->devtools = $store->devtools->nextTab();
         $store->requests = $store->requests
             ->append($this->request('req-1', '/api/first'))
             ->append($this->request('req-2', '/api/second'));
@@ -100,6 +118,27 @@ final class DevToolsScreenTest extends TestCase
         self::assertTrue($screen->handleNormalKey(new KeyEvent(Key::Enter)));
         self::assertSame(LlmRequestDetailScreen::class, $navigator->lastScreen);
         self::assertSame(0, $store->requests->detailScrollOffset);
+    }
+
+    #[Test]
+    public function requestNavigationIsIgnoredOnMetricsTab(): void
+    {
+        $store = new AppStore();
+        $store->requests = $store->requests
+            ->append($this->request('req-1', '/api/first'))
+            ->append($this->request('req-2', '/api/second'));
+        $navigator = new RecordingNavigator();
+        $screen = new DevToolsScreen(
+            $store,
+            new MountSystem($this->createStub(TaskScope::class)),
+            $navigator,
+        );
+
+        self::assertSame(DevToolsTab::Metrics, $store->devtools->activeTab);
+        self::assertFalse($screen->handleNormalKey(new KeyEvent(Key::Up)));
+        self::assertFalse($screen->handleNormalKey(new KeyEvent(Key::Enter)));
+        self::assertSame(1, $store->requests->focusedIndex);
+        self::assertNull($navigator->lastScreen);
     }
 
     #[Test]

@@ -37,7 +37,7 @@ use function Phalanx\Theatron\Ui\text;
 class ChatScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBindings, Mountable
 {
     private const array PULSE_COLORS = [242, 245, 248, 251, 254, 251, 248, 245];
-    private const int LOCAL_FOOTER_ROWS = 6;
+    private const int MAX_COMPOSER_ROWS = 5;
 
     private(set) Signal $inputText;
     private(set) ChatConversationHandler $conversationHandler;
@@ -57,13 +57,15 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBinding
 
     public function __invoke(ScreenContext $ctx): Renderable
     {
+        $composerRows = self::composerRows((string) $this->inputText->get());
+
         return column(
-            $this->renderConversation($ctx->width, max(1, $ctx->height - self::LOCAL_FOOTER_ROWS)),
+            $this->renderConversation($ctx->width, max(1, $ctx->height - self::footerRows($composerRows))),
             self::spacer(),
             $this->renderStatusLine(),
             self::spacer(),
-            $this->renderInput(),
-            self::rule(min((int) ($ctx->width * 0.4), 30)),
+            $this->renderInput($composerRows),
+            self::rule(self::ruleWidth($ctx->width)),
             self::spacer(),
         );
     }
@@ -80,28 +82,7 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBinding
 
     public function statusBar(): Renderable
     {
-        return text(
-            Line::from(
-                Span::styled('  ^P', TextStyle::new()->fg(Color::indexed(245))),
-                Span::styled(' up', TextStyle::new()->fg(Color::indexed(250))),
-                self::pipe(),
-                Span::styled('^N', TextStyle::new()->fg(Color::indexed(245))),
-                Span::styled(' down', TextStyle::new()->fg(Color::indexed(250))),
-                self::pipe(),
-                Span::styled('^D', TextStyle::new()->fg(Color::indexed(245))),
-                Span::styled(' devtools', TextStyle::new()->fg(Color::indexed(250))),
-                self::pipe(),
-                Span::styled('^S', TextStyle::new()->fg(Color::indexed(245))),
-                Span::styled(' settings', TextStyle::new()->fg(Color::indexed(250))),
-                self::pipe(),
-                Span::styled('Enter', TextStyle::new()->fg(Color::indexed(245))),
-                Span::styled(' send', TextStyle::new()->fg(Color::indexed(250))),
-                self::pipe(),
-                Span::styled('^C', TextStyle::new()->fg(Color::indexed(245))),
-                Span::styled(' quit', TextStyle::new()->fg(Color::indexed(250))),
-            ),
-            TdomStyle::of(size: Size::fixed(1)),
-        );
+        return text(self::controlPanelLine(), TdomStyle::of(size: Size::fixed(1)));
     }
 
     /** @return list<array{string, Focusable}> */
@@ -247,6 +228,44 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBinding
         return self::row(Line::from(
             Span::styled('  ' . str_repeat('╴', $width), TextStyle::new()->fg(Color::indexed(236))),
         ));
+    }
+
+    private static function composerRows(string $text): int
+    {
+        return min(self::MAX_COMPOSER_ROWS, max(1, count(explode("\n", $text))));
+    }
+
+    private static function footerRows(int $composerRows): int
+    {
+        return $composerRows + 5;
+    }
+
+    private static function ruleWidth(int $screenWidth): int
+    {
+        return min(max(1, $screenWidth - 2), max(1, self::controlPanelLine()->width - 2));
+    }
+
+    private static function controlPanelLine(): Line
+    {
+        return Line::from(
+            Span::styled('  ^P', TextStyle::new()->fg(Color::indexed(245))),
+            Span::styled(' up', TextStyle::new()->fg(Color::indexed(250))),
+            self::pipe(),
+            Span::styled('^N', TextStyle::new()->fg(Color::indexed(245))),
+            Span::styled(' down', TextStyle::new()->fg(Color::indexed(250))),
+            self::pipe(),
+            Span::styled('^D', TextStyle::new()->fg(Color::indexed(245))),
+            Span::styled(' devtools', TextStyle::new()->fg(Color::indexed(250))),
+            self::pipe(),
+            Span::styled('^S', TextStyle::new()->fg(Color::indexed(245))),
+            Span::styled(' settings', TextStyle::new()->fg(Color::indexed(250))),
+            self::pipe(),
+            Span::styled('Enter', TextStyle::new()->fg(Color::indexed(245))),
+            Span::styled(' send', TextStyle::new()->fg(Color::indexed(250))),
+            self::pipe(),
+            Span::styled('^C', TextStyle::new()->fg(Color::indexed(245))),
+            Span::styled(' quit', TextStyle::new()->fg(Color::indexed(250))),
+        );
     }
 
     private static function pipe(): Span
@@ -448,9 +467,13 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBinding
         return self::row(Line::from(...$spans));
     }
 
-    private function renderInput(): Renderable
+    private function renderInput(int $rows): Renderable
     {
         $text = (string) $this->inputText->get();
+
+        if ($rows > 1) {
+            return $this->renderMultilineInput($text, $rows);
+        }
 
         return input(
             value: $text,
@@ -458,6 +481,36 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBinding
             cursor: mb_strlen($text),
             style: TdomStyle::of(size: Size::fixed(1)),
         );
+    }
+
+    private function renderMultilineInput(string $text, int $rows): Renderable
+    {
+        $lines = explode("\n", $text);
+        $visible = array_slice($lines, -$rows);
+        $firstVisible = count($lines) - count($visible);
+        $children = [];
+
+        foreach ($visible as $i => $line) {
+            $prompt = $firstVisible + $i === 0 ? '  +> ' : '     ';
+            $isLast = $i === count($visible) - 1;
+
+            if ($isLast) {
+                $children[] = input(
+                    value: $line,
+                    prompt: $prompt,
+                    cursor: mb_strlen($line),
+                    style: TdomStyle::of(size: Size::fixed(1)),
+                );
+
+                continue;
+            }
+
+            $children[] = self::row(Line::from(
+                Span::styled($prompt . $line, TextStyle::new()->fg(Color::indexed(252))),
+            ));
+        }
+
+        return column(...$children)->styled(TdomStyle::of(size: Size::fixed($rows)));
     }
 
     private function assistantAfter(ConversationSlice $conversation, int $userIndex): ?ConversationMessage

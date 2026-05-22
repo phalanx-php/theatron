@@ -131,6 +131,42 @@ final class ChatScreenTest extends TestCase
     }
 
     #[Test]
+    public function multilineComposerPaintsQueuedTextAboveRule(): void
+    {
+        $store = new AppStore();
+        $screen = new ChatScreen($store);
+        $screen->inputText->set("msg1\n\nmsg2\n\nmsg3");
+        $buffer = self::paint(
+            $screen($this->makeContext($store, width: 120, height: 30)),
+            width: 120,
+            height: 30,
+        );
+
+        self::assertSame(23, self::findRowContaining($buffer, 'msg1'));
+        self::assertSame(25, self::findRowContaining($buffer, 'msg2'));
+        self::assertSame(27, self::findRowContaining($buffer, 'msg3'));
+        self::assertSame(28, self::findRowContaining($buffer, '╴╴╴'));
+    }
+
+    #[Test]
+    public function composerRuleExtendsToStatusControlEnd(): void
+    {
+        $store = new AppStore();
+        $screen = new ChatScreen($store);
+        $screen->inputText->set("msg1\n\nmsg2\n\nmsg3");
+        $buffer = self::paint(
+            $screen($this->makeContext($store, width: 120, height: 30)),
+            width: 120,
+            height: 30,
+        );
+
+        $ruleRow = self::bufferRow($buffer, self::findRowContaining($buffer, '╴╴╴'));
+
+        self::assertSame(mb_strlen(self::flatten($screen->statusBar())), mb_strlen($ruleRow));
+        self::assertGreaterThan(30, mb_substr_count($ruleRow, '╴'));
+    }
+
+    #[Test]
     public function statusBarRendersPocControls(): void
     {
         $screen = new ChatScreen(new AppStore());

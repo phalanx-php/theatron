@@ -2,6 +2,7 @@
 *.md
 
 !.gitignore
+!.env.dist
 !README.md
 
 /vendor/

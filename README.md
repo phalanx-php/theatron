@@ -1,8 +1,10 @@
 # Theatron
 
-Async terminal UI framework for PHP 8.4+, built on the Phalanx runtime. Reactive
-components driven by signals and stores, rendered through TDOM (Terminal DOM) into
-terminal paint calls.
+Async terminal UI framework for PHP 8.4+, built on the Phalanx runtime.
+
+Theatron apps are invokable screens and components that return TDOM trees. The
+runtime owns the terminal stage, input dispatch, navigation, dirty tracking, and
+paint loop.
 
 ## Requirements
 
@@ -17,10 +19,54 @@ terminal paint calls.
 composer install
 ```
 
+Run the bundled template app:
+
+```bash
+php bin/theatron
+```
+
+Run the non-interactive pipeline demo:
+
+```bash
+php demos/full.php
+```
+
+## Current App Shape
+
+Configure the app with `Theatron::app()`, then register one store, screens,
+global bindings, optional service bundles, and the theme.
+
+```php
+use Phalanx\Theatron\Binding\Binding;
+use Phalanx\Theatron\Template\AppStore;
+use Phalanx\Theatron\Template\Screen\ChatScreen;
+use Phalanx\Theatron\Template\Screen\DevToolsScreen;
+use Phalanx\Theatron\Template\Screen\SettingsScreen;
+use Phalanx\Theatron\Theatron;
+
+$app = Theatron::app($context)
+    ->store(AppStore::class)
+    ->screens([
+        ChatScreen::class,
+        DevToolsScreen::class,
+        SettingsScreen::class,
+    ])
+    ->globalBindings([
+        Binding::ctrl('c')->quit()->label('quit'),
+        Binding::ctrl('d')->workspace(DevToolsScreen::class)->label('devtools'),
+        Binding::ctrl('s')->workspace(SettingsScreen::class)->label('settings'),
+    ])
+    ->devtools(true)
+    ->build();
+```
+
+`bin/theatron` wraps that builder in `Application::starting(...)->run(...)`, so
+the `TheatronApp` starts inside an Aegis execution scope.
+
 ## Components
 
-A component is any class implementing `Component`. It receives a `RenderContext` and
-returns a `Renderable` tree built with the `Ui` factory.
+A component implements `Component`. It receives a `RenderContext` and returns a
+`Renderable` tree.
 
 ```php
 use Phalanx\Theatron\Context\RenderContext;
@@ -31,7 +77,8 @@ final class Greeting implements Component
 {
     public function __construct(
         private(set) string $name = 'Leonidas',
-    ) {}
+    ) {
+    }
 
     public function __invoke(RenderContext $ctx): Renderable
     {
@@ -40,92 +87,145 @@ final class Greeting implements Component
 }
 ```
 
-Components are mounted through the `MountSystem`, which scans constructor properties
-for `Signal` instances, wires up dirty tracking, and manages disposal. Constructor
-parameters can be passed at mount time:
+Mount children through the context. `mount()` returns a `MountedComponent`, so
+render it with the same context when you want the child output in the current
+tree.
 
 ```php
-$mounted = $ctx->mount(Greeting::class, name: 'Themistocles');
-$element = $mounted->render($ctx);
+public function __invoke(RenderContext $ctx): Renderable
+{
+    return $ctx->ui->panel(
+        'Greeting',
+        $ctx->mount(Greeting::class, name: 'Themistocles')->render($ctx),
+    );
+}
 ```
+
+Constructor params passed at mount time are runtime params. Constructor defaults
+are used when no runtime value is supplied.
 
 ## Signals
 
-A `Signal` holds a reactive value. When the value changes, subscribers are notified
-and the owning component is marked dirty for re-render.
-
-Declare signals as constructor-promoted properties with defaults:
+Signals use method syntax. Read with `get()`, write with `set()`.
 
 ```php
+use Phalanx\Theatron\Context\RenderContext;
+use Phalanx\Theatron\Contract\Component;
 use Phalanx\Theatron\Reactive\Signal;
+use Phalanx\Theatron\Tdom\Renderable;
 
 final class Counter implements Component
 {
     public function __construct(
         private(set) Signal $count = new Signal(0),
-    ) {}
+    ) {
+    }
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text("Count: {$this->count->get()}");
+        return $ctx->ui->text('Count: ' . $this->count->get());
+    }
+
+    public function increment(): void
+    {
+        $this->count->set(static fn(int $current): int => $current + 1);
     }
 }
 ```
 
-Read with `$signal->get()`, write with `$signal->set($new)`. To derive from the
-current atomic value, pass a static closure: `$signal->set(static fn(int $current): int => $current + 1)`.
-Non-closure callables are stored as values; only `Closure` instances are treated
-as updater callbacks.
+Updater callbacks must be static closures. Non-closure callables are stored as
+values. Subscribers must also be static closures.
 
-Signals passed as constructor params from a parent are treated as **borrowed** --
-the child subscribes to changes but does not own or dispose them.
+Signals passed into a child component are borrowed. The child subscribes to them,
+but it does not dispose them when it unmounts.
 
 ## Screens
 
-A `Screen` is the top-level unit of navigation. It receives a `ScreenContext`
-(which extends `RenderContext` with navigation and input mode access) and returns
-a full-screen `Renderable` tree.
+A screen implements `Screen`. It receives a `ScreenContext`, which carries the
+screen scope, UI factory, theme, navigator, and mount system.
 
 ```php
 use Phalanx\Theatron\Context\ScreenContext;
 use Phalanx\Theatron\Contract\Screen;
 use Phalanx\Theatron\Tdom\Renderable;
+use Phalanx\Theatron\Template\AppStore;
 
-class DashboardScreen implements Screen
+final class DashboardScreen implements Screen
 {
     public function __construct(
         private(set) AppStore $store,
-    ) {}
+    ) {
+    }
 
     public function __invoke(ScreenContext $ctx): Renderable
     {
         return $ctx->ui->column(
-            $ctx->ui->panel('Status', $ctx->ui->text('All systems operational')),
-            $ctx->ui->text("Agents online: {$this->store->agents->count()}"),
+            $ctx->ui->text('Dashboard'),
+            $ctx->ui->text('Messages: ' . count($this->store->conversation->messages)),
         );
     }
 }
 ```
 
-Screens are registered with the builder:
+Screens can declare their own focus targets, status bar, and key bindings.
 
 ```php
-Theatron::app($context)
-    ->store(AppStore::class)
-    ->screens([DashboardScreen::class, ChatScreen::class])
-    ->build();
+use Phalanx\Theatron\Binding\Binding;
+use Phalanx\Theatron\Contract\DeclaresBindings;
+use Phalanx\Theatron\Contract\Focusable;
+use Phalanx\Theatron\Contract\HasFocusables;
+use Phalanx\Theatron\Contract\HasStatusBar;
+use Phalanx\Theatron\Contract\Screen;
+use Phalanx\Theatron\Context\ScreenContext;
+use Phalanx\Theatron\Input\Key;
+use Phalanx\Theatron\Tdom\Renderable;
+use Phalanx\Theatron\Tdom\Ui;
+
+final class SettingsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBindings
+{
+    public function __invoke(ScreenContext $ctx): Renderable
+    {
+        return $ctx->ui->text('Settings');
+    }
+
+    public function statusBar(Ui $ui): Renderable
+    {
+        return $ui->text('  Space toggle  |  Esc back');
+    }
+
+    /** @return list<array{string, Focusable}> */
+    public function focusables(): array
+    {
+        return [['settings', $this]];
+    }
+
+    /** @return list<Binding> */
+    public function bindings(): array
+    {
+        return [
+            Binding::key(Key::Space)->label('toggle'),
+            Binding::key(Key::Escape)->back()->label('back'),
+        ];
+    }
+}
 ```
+
+Use `$ctx->navigator->go(SomeScreen::class)` to switch screens. `Escape` can be
+bound to `Binding::key(Key::Escape)->back()` when a screen should return to the
+previous workspace.
 
 ## Store
 
-The `Store` is a reactive state container organized into typed slices. Each slice
-is a plain object registered at construction time. Property hooks provide typed
-access while routing reads and writes through the store's subscription system.
+`Store` is a reactive state container organized into typed slices. Register each
+slice once, expose it through property hooks, and update slices by assigning a
+new immutable value.
 
 ```php
 use Phalanx\Theatron\State\Store;
+use Phalanx\Theatron\Template\Slice\ActivitySlice;
+use Phalanx\Theatron\Template\Slice\ConversationSlice;
 
-class AppStore extends Store
+final class AppStore extends Store
 {
     public ConversationSlice $conversation {
         get => $this->read(ConversationSlice::class);
@@ -145,97 +245,116 @@ class AppStore extends Store
 }
 ```
 
-Mutate slices through `mutate()` to batch changes and notify subscribers:
+Slices return new instances:
+
+```php
+$store->conversation = $store->conversation->addUserMessage($text);
+$store->activity = $store->activity->withStatus(ActivityStatus::Running);
+```
+
+`mutate()` still exists for batched slice updates:
 
 ```php
 $store->mutate(
     ConversationSlice::class,
-    static fn(ConversationSlice $s) => $s->addUserMessage($text),
+    static fn(ConversationSlice $slice): ConversationSlice => $slice->addUserMessage($text),
 );
 ```
 
 ## Rendering with TDOM
 
-TDOM is the element tree that describes terminal output. The `Ui` factory on the
-render context builds elements; the renderer paints them to the terminal.
-
-### Elements
+Build terminal UI with the `Ui` factory on the render context.
 
 | Factory Method | Element | Purpose |
 |---|---|---|
-| `$ui->text($content)` | `TextElement` | Single line of text, plain string or styled `Line` |
-| `$ui->panel($title, $child)` | `PanelElement` | Bordered box with title and child content |
+| `$ui->text($content, $style)` | `TextElement` | Single line of text, plain string or styled `Line` |
+| `$ui->panel($title, $child, $style)` | `PanelElement` | Bordered box with title and child content |
 | `$ui->column(...$children)` | `ColumnElement` | Vertical stack |
 | `$ui->row(...$children)` | `RowElement` | Horizontal layout |
 | `$ui->grid($columns, ...$children)` | `GridElement` | Column-defined grid |
-| `$ui->scrollable($content, $maxLines)` | `ScrollElement` | Scrollable text region |
-| `$ui->input($value, $prompt, $cursor)` | `InputElement` | Text input field |
-| `$ui->spinner($label)` | `SpinnerElement` | Animated spinner |
-| `$ui->statusLine(...$sections)` | `StatusLineElement` | Bottom status bar |
-| `$ui->divider()` | `DividerElement` | Horizontal rule |
-| `$ui->progress($value, $label)` | `ProgressElement` | Progress bar (0.0 - 1.0) |
+| `$ui->scrollable($content, $maxLines, $style)` | `ScrollElement` | Scrollable text region |
+| `$ui->input($value, $prompt, $cursor, $style)` | `InputElement` | Text input field |
+| `$ui->spinner($label, $frame, $style)` | `SpinnerElement` | Animated spinner |
+| `$ui->statusLine(...$sections)` | `StatusLineElement` | Status bar sections |
+| `$ui->divider($style)` | `DividerElement` | Horizontal rule |
+| `$ui->progress($value, $label, $style)` | `ProgressElement` | Progress bar from `0.0` to `1.0` |
 
-All elements accept an optional `Style` for borders, colors, and sizing. Elements
-implement `Renderable` and compose into trees:
+Example:
 
 ```php
+use Phalanx\Theatron\Layout\Border;
+use Phalanx\Theatron\Layout\Size;
+use Phalanx\Theatron\Style\Color;
+use Phalanx\Theatron\Style\Style as TextStyle;
+use Phalanx\Theatron\Tdom\Style;
+use Phalanx\Theatron\Text\Line;
+use Phalanx\Theatron\Text\Span;
+
 public function __invoke(RenderContext $ctx): Renderable
 {
-    $header = $ctx->ui->text(
-        Line::from(
-            Span::styled('Apollo', Style::new()->fg(Color::brightCyan())->bold()),
-            Span::plain(' -- status panel'),
-        ),
-    );
+    $header = $ctx->ui->text(Line::from(
+        Span::styled('Theatron', TextStyle::new()->fg(Color::indexed(250))->bold()),
+        Span::plain(' ready'),
+    ));
 
     $body = $ctx->ui->column(
-        $ctx->ui->text("Memory: {$this->memoryUsage()}"),
-        $ctx->ui->progress(0.73, 'CPU'),
+        $header,
+        $ctx->ui->progress(0.73, 'pipeline'),
         $ctx->ui->divider(),
         $ctx->ui->text('All tasks nominal.'),
     );
 
-    return $ctx->ui->panel('Dashboard', $body);
+    return $ctx->ui->panel(
+        'Dashboard',
+        $body,
+        Style::of(size: Size::fill(), border: Border::Single),
+    );
 }
 ```
 
-### Styled Text
+Use `Line` and `Span` when text needs mixed styles. Use string input when plain
+text is enough.
 
-Rich text is built with `Line` and `Span`:
+## Bindings
 
-```php
-use Phalanx\Theatron\Text\Line;
-use Phalanx\Theatron\Text\Span;
-use Phalanx\Theatron\Style\Style;
-use Phalanx\Theatron\Style\Color;
-
-$line = Line::from(
-    Span::styled('Error:', Style::new()->fg(Color::brightRed())->bold()),
-    Span::plain(' connection refused'),
-);
-
-$ctx->ui->text($line);
-```
-
-Colors support named constants (`Color::brightCyan()`), 256-color indexed values
-(`Color::indexed(242)`), and RGB (`Color::rgb(255, 140, 0)`).
-
-## Builder
-
-Wire everything through `TheatronBuilder`:
+Bindings are fluent objects registered globally or by a screen/component that
+implements `DeclaresBindings`.
 
 ```php
-use Phalanx\Theatron\Theatron;
+use Phalanx\Theatron\Binding\Binding;
+use Phalanx\Theatron\Input\Key;
 
-$app = Theatron::app($context)
-    ->store(AppStore::class)
-    ->screens([ChatScreen::class, SettingsScreen::class])
-    ->globalBindings($bindings)
-    ->theme(Theme::default())
-    ->devtools(true)
-    ->build();
+[
+    Binding::ctrl('c')->quit()->label('quit'),
+    Binding::ctrl('d')->workspace(DevToolsScreen::class)->label('devtools'),
+    Binding::key(Key::Escape)->back()->label('back'),
+]
 ```
 
-When `devtools(true)` is set, the builder creates a `SignalRegistry` that tracks
-all component signals for runtime inspection through the DevTools overlay
-(Metrics, Signals, Tree, and Store tabs).
+Resolution is layered: focused component, active screen, global bindings. The
+active binding list can be rendered with `$ctx->hints()` in component render
+contexts.
+
+## Template Screens
+
+The bundled template app is the current REPL-style reference:
+
+- `ChatScreen` -- conversation history, active exchange, input composer, queueing,
+  thinking status, and bottom controls.
+- `DevToolsScreen` -- store slices, runtime metrics, GC/runtime details, and LLM
+  request list.
+- `LlmRequestDetailScreen` -- request/response body preview with JSON highlighting.
+- `SettingsScreen` -- tabbed General/Tools/MCP/Model/Display settings backed by
+  `SettingsSlice`.
+
+DevTools and settings are workspace screens, not overlays.
+
+## Verification
+
+```bash
+vendor/bin/phpunit
+vendor/bin/phpstan analyse --memory-limit=1G
+vendor/bin/phpcs
+vendor/bin/rector process --dry-run
+php demos/full.php
+```

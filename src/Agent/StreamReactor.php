@@ -17,6 +17,7 @@ use Phalanx\Panoply\Cue\Output\Channel;
 use Phalanx\Panoply\Cue\Output\TokenDelta;
 use Phalanx\Panoply\Cue\Output\TokenStop;
 use Phalanx\Panoply\Cue\Usage\Delta as UsageDelta;
+use Phalanx\Panoply\Cue\Usage\FinalUsage;
 use Phalanx\Theatron\Template\AppStore;
 use Phalanx\Theatron\Template\Slice\ActivitySlice;
 use Phalanx\Theatron\Template\Slice\ActivityStatus;
@@ -37,17 +38,18 @@ final class StreamReactor
     private static function dispatch(Cue $cue, AppStore $store): void
     {
         match (true) {
-            $cue instanceof TokenDelta => self::onTokenDelta($cue, $store),
             $cue instanceof TokenStop => self::onTokenStop($store),
-            $cue instanceof EffectRequested => self::onEffectRequested($cue, $store),
-            $cue instanceof EffectExecuted => self::onEffectResolved($store),
+            $cue instanceof TokenDelta => self::onTokenDelta($cue, $store),
             $cue instanceof EffectFailed => self::onEffectResolved($store),
             $cue instanceof EffectDenied => self::onEffectResolved($store),
+            $cue instanceof EffectExecuted => self::onEffectResolved($store),
+            $cue instanceof EffectRequested => self::onEffectRequested($cue, $store),
             $cue instanceof ActivityStarted => self::onActivityStarted($store),
-            $cue instanceof ActivityCompleted => self::onActivityEnded($store, ActivityStatus::Completed),
             $cue instanceof ActivityFailed => self::onActivityEnded($store, ActivityStatus::Failed),
+            $cue instanceof ActivityCompleted => self::onActivityEnded($store, ActivityStatus::Completed),
             $cue instanceof ActivityCancelled => self::onActivityEnded($store, ActivityStatus::Cancelled),
             $cue instanceof UsageDelta => self::onUsageDelta($cue, $store),
+            $cue instanceof FinalUsage => self::onFinalUsage($cue, $store),
             default => null,
         };
     }
@@ -101,5 +103,11 @@ final class StreamReactor
     private static function onUsageDelta(UsageDelta $cue, AppStore $store): void
     {
         $store->activity = $store->activity->updateUsage($cue->inputTokens, $cue->outputTokens);
+    }
+
+    private static function onFinalUsage(FinalUsage $cue, AppStore $store): void
+    {
+        $store->activity = $store->activity->withUsage($cue->inputTokens, $cue->outputTokens);
+        $store->requests = $store->requests->updateFocusedTokenCount($store->activity->totalTokens);
     }
 }

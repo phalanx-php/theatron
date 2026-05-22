@@ -23,6 +23,13 @@ final class AthenaServiceBundle extends ServiceBundle
 
     public function services(Services $services, AppContext $context): void
     {
-        $this->athenaBundle->services($services, $context);
+        $bundle = new AthenaBundle(
+            router: new LlmRequestRecordingRouter($this->athenaBundle->router),
+            toolBundles: $this->athenaBundle->toolBundles,
+            mcpServers: $this->athenaBundle->mcpServers,
+            hooks: $this->athenaBundle->hooks,
+        );
+
+        $bundle->services($services, $context);
     }
 }

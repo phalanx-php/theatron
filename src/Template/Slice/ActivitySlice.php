@@ -76,12 +76,17 @@ class ActivitySlice
         $newInput = $this->inputTokens + $inputTokens;
         $newOutput = $this->outputTokens + $outputTokens;
 
+        return $this->withUsage($newInput, $newOutput);
+    }
+
+    public function withUsage(int $inputTokens, int $outputTokens): self
+    {
         return new self(
             status: $this->status,
             pendingEffect: $this->pendingEffect,
-            inputTokens: $newInput,
-            outputTokens: $newOutput,
-            totalTokens: $newInput + $newOutput,
+            inputTokens: $inputTokens,
+            outputTokens: $outputTokens,
+            totalTokens: $inputTokens + $outputTokens,
             modelName: $this->modelName,
             pulseFrame: $this->pulseFrame,
         );

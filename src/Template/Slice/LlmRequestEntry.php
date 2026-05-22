@@ -58,4 +58,21 @@ class LlmRequestEntry
             error: $error,
         );
     }
+
+    public function withTokenCount(int $tokenCount): self
+    {
+        return new self(
+            requestId: $this->requestId,
+            method: $this->method,
+            path: $this->path,
+            status: $this->status,
+            elapsedMs: $this->elapsedMs,
+            tokenCount: $tokenCount,
+            requestBody: $this->requestBody,
+            responseBody: $this->responseBody,
+            startTime: $this->startTime,
+            complete: $this->complete,
+            error: $this->error,
+        );
+    }
 }

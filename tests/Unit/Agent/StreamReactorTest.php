@@ -17,10 +17,12 @@ use Phalanx\Panoply\Cue\Output\TokenDelta;
 use Phalanx\Panoply\Cue\Output\TokenStop;
 use Phalanx\Panoply\Cue\StopReason;
 use Phalanx\Panoply\Cue\Usage\Delta as UsageDelta;
+use Phalanx\Panoply\Cue\Usage\FinalUsage;
 use Phalanx\Panoply\Effect\Kind;
 use Phalanx\Theatron\Agent\StreamReactor;
 use Phalanx\Theatron\Template\AppStore;
 use Phalanx\Theatron\Template\Slice\ActivityStatus;
+use Phalanx\Theatron\Template\Slice\LlmRequestEntry;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -261,6 +263,40 @@ final class StreamReactorTest extends TestCase
         self::assertSame(150, $store->activity->inputTokens);
         self::assertSame(300, $store->activity->outputTokens);
         self::assertSame(450, $store->activity->totalTokens);
+    }
+
+    #[Test]
+    public function finalUsageReplacesTokenCounters(): void
+    {
+        $store = new AppStore();
+        $at = new DateTimeImmutable();
+
+        StreamReactor::consume([
+            new UsageDelta('cue_1', 1, 'act_plato', null, null, $at, 25, 75),
+            new FinalUsage('cue_2', 2, 'act_plato', null, null, $at, 150, 300),
+        ], $store);
+
+        self::assertSame(150, $store->activity->inputTokens);
+        self::assertSame(300, $store->activity->outputTokens);
+        self::assertSame(450, $store->activity->totalTokens);
+    }
+
+    #[Test]
+    public function finalUsageRefreshesFocusedRequestTokenCount(): void
+    {
+        $store = new AppStore();
+        $store->requests = $store->requests
+            ->append(new LlmRequestEntry('req-1', 'POST', '/first'))
+            ->append(new LlmRequestEntry('req-2', 'POST', '/second'))
+            ->completeById('req-2', 200, 25.0, 0, '{}');
+        $at = new DateTimeImmutable();
+
+        StreamReactor::consume([
+            new FinalUsage('cue_1', 1, 'act_plato', null, null, $at, 150, 300),
+        ], $store);
+
+        self::assertSame(450, $store->requests->focused()?->tokenCount);
+        self::assertSame(null, $store->requests->entries[0]->tokenCount);
     }
 
     #[Test]

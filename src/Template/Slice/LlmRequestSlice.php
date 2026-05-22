@@ -74,6 +74,18 @@ class LlmRequestSlice
         return $this->entries[$this->focusedIndex] ?? null;
     }
 
+    public function updateFocusedTokenCount(int $tokenCount): self
+    {
+        if (!isset($this->entries[$this->focusedIndex])) {
+            return $this;
+        }
+
+        $entries = $this->entries;
+        $entries[$this->focusedIndex] = $entries[$this->focusedIndex]->withTokenCount($tokenCount);
+
+        return new self(array_values($entries), $this->focusedIndex, $this->detailScrollOffset);
+    }
+
     public function scrollDetailUp(int $lines = 3): self
     {
         return new self($this->entries, $this->focusedIndex, max(0, $this->detailScrollOffset - $lines));

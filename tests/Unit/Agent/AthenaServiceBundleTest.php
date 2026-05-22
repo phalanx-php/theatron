@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace Phalanx\Theatron\Tests\Unit\Agent;
 
 use Phalanx\Athena\AthenaBundle;
+use Phalanx\Athena\AthenaConfig;
 use Phalanx\Athena\Router\InvocationRouter;
 use Phalanx\Boot\AppContext;
 use Phalanx\Service\ServiceBundle;
+use Phalanx\Service\ServiceCatalog;
 use Phalanx\Service\ServiceConfig;
 use Phalanx\Service\Services;
 use Phalanx\Theatron\Agent\AthenaServiceBundle;
+use Phalanx\Theatron\Agent\LlmRequestRecordingRouter;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -57,6 +60,23 @@ final class AthenaServiceBundleTest extends TestCase
         $context = new AppContext([]);
 
         $bundle->services($services, $context);
+    }
+
+    #[Test]
+    public function servicesInstallRequestRecordingRouter(): void
+    {
+        $catalog = new ServiceCatalog(new AppContext());
+        $bundle = AthenaServiceBundle::from(self::makeAthenaBundle());
+
+        $bundle->services($catalog, new AppContext());
+
+        $factory = $catalog->compile()->resolve(AthenaConfig::class)->factoryFn;
+        self::assertNotNull($factory);
+
+        $config = $factory();
+
+        self::assertInstanceOf(AthenaConfig::class, $config);
+        self::assertInstanceOf(LlmRequestRecordingRouter::class, $config->router);
     }
 
     private static function makeAthenaBundle(): AthenaBundle

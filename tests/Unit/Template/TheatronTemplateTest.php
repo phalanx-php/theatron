@@ -6,9 +6,10 @@ namespace Phalanx\Theatron\Tests\Unit\Template;
 
 use Phalanx\Theatron\Binding\Binding;
 use Phalanx\Theatron\Template\AppStore;
-use Phalanx\Theatron\Template\Overlay\DevToolsOverlay;
 use Phalanx\Theatron\Template\Screen\AgentBoardScreen;
 use Phalanx\Theatron\Template\Screen\ChatScreen;
+use Phalanx\Theatron\Template\Screen\DevToolsScreen;
+use Phalanx\Theatron\Template\Screen\LlmRequestDetailScreen;
 use Phalanx\Theatron\Template\Screen\SettingsScreen;
 use Phalanx\Theatron\Template\TheatronTemplate;
 use Phalanx\Theatron\Theatron;
@@ -26,22 +27,28 @@ final class TheatronTemplateTest extends TestCase
     }
 
     #[Test]
-    public function configureRegistersThreeScreens(): void
+    public function configureRegistersReplParityScreens(): void
     {
         $builder = TheatronTemplate::configure(Theatron::app());
 
         self::assertSame(
-            [ChatScreen::class, AgentBoardScreen::class, SettingsScreen::class],
+            [
+                ChatScreen::class,
+                AgentBoardScreen::class,
+                DevToolsScreen::class,
+                LlmRequestDetailScreen::class,
+                SettingsScreen::class,
+            ],
             $builder->registeredScreens(),
         );
     }
 
     #[Test]
-    public function configureRegistersFiveGlobalBindings(): void
+    public function configureRegistersReplGlobalBindings(): void
     {
         $builder = TheatronTemplate::configure(Theatron::app());
 
-        self::assertCount(5, $builder->registeredGlobalBindings());
+        self::assertCount(3, $builder->registeredGlobalBindings());
     }
 
     #[Test]
@@ -52,34 +59,22 @@ final class TheatronTemplateTest extends TestCase
 
         self::assertInstanceOf(Binding::class, $bindings[0]);
         self::assertTrue($bindings[0]->action?->isQuit());
-        self::assertSame('Quit', $bindings[0]->label);
+        self::assertSame('quit', $bindings[0]->label);
     }
 
     #[Test]
-    public function workspaceBindingsTargetCorrectScreens(): void
+    public function workspaceBindingsTargetFullPageScreens(): void
     {
         $builder = TheatronTemplate::configure(Theatron::app());
         $bindings = $builder->registeredGlobalBindings();
 
         self::assertTrue($bindings[1]->action?->isWorkspace());
-        self::assertSame(ChatScreen::class, $bindings[1]->action->target);
+        self::assertSame(DevToolsScreen::class, $bindings[1]->action->target);
+        self::assertSame('devtools', $bindings[1]->label);
 
         self::assertTrue($bindings[2]->action?->isWorkspace());
-        self::assertSame(AgentBoardScreen::class, $bindings[2]->action->target);
-
-        self::assertTrue($bindings[3]->action?->isWorkspace());
-        self::assertSame(SettingsScreen::class, $bindings[3]->action->target);
-    }
-
-    #[Test]
-    public function devtoolsBindingTogglesDevToolsOverlay(): void
-    {
-        $builder = TheatronTemplate::configure(Theatron::app());
-        $bindings = $builder->registeredGlobalBindings();
-
-        self::assertTrue($bindings[4]->action?->isToggle());
-        self::assertSame(DevToolsOverlay::class, $bindings[4]->action->target);
-        self::assertSame('DevTools', $bindings[4]->label);
+        self::assertSame(SettingsScreen::class, $bindings[2]->action->target);
+        self::assertSame('settings', $bindings[2]->label);
     }
 
     #[Test]

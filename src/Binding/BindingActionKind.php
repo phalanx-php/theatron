@@ -9,5 +9,6 @@ enum BindingActionKind
     case Quit;
     case Workspace;
     case Toggle;
+    case Back;
     case Action;
 }

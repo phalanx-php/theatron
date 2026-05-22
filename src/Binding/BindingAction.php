@@ -32,6 +32,11 @@ final class BindingAction
         return new self(BindingActionKind::Toggle, target: $component);
     }
 
+    public static function back(): self
+    {
+        return new self(BindingActionKind::Back);
+    }
+
     public static function action(Closure $callback): self
     {
         return new self(BindingActionKind::Action, callback: $callback);
@@ -50,6 +55,11 @@ final class BindingAction
     public function isToggle(): bool
     {
         return $this->kind === BindingActionKind::Toggle;
+    }
+
+    public function isBack(): bool
+    {
+        return $this->kind === BindingActionKind::Back;
     }
 
     public function isAction(): bool

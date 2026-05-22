@@ -65,6 +65,11 @@ final class Binding
         return $this->withAction(BindingAction::toggle($component));
     }
 
+    public function back(): self
+    {
+        return $this->withAction(BindingAction::back());
+    }
+
     public function action(Closure $callback): self
     {
         $rf = new ReflectionFunction($callback);

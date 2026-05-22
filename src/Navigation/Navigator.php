@@ -12,6 +12,8 @@ interface Navigator
     /** @param class-string<Screen> $screen */
     public function go(string $screen): void;
 
+    public function back(): bool;
+
     /** @param class-string<Component> $component */
     public function overlay(string $component, mixed ...$params): void;
 

@@ -13,6 +13,7 @@ use Phalanx\Theatron\Buffer\Rect;
 use Phalanx\Theatron\Component\MountSystem;
 use Phalanx\Theatron\Context\RenderContext;
 use Phalanx\Theatron\Context\ScreenContext;
+use Phalanx\Theatron\Contract\DeclaresBindings;
 use Phalanx\Theatron\Contract\HasFocusables;
 use Phalanx\Theatron\Contract\HasStatusBar;
 use Phalanx\Theatron\Contract\Screen;
@@ -23,6 +24,7 @@ use Phalanx\Theatron\Input\InputModeSlice;
 use Phalanx\Theatron\Input\KeyEvent;
 use Phalanx\Theatron\Input\ModeDispatcher;
 use Phalanx\Theatron\Kit\ScreenLayout;
+use Phalanx\Theatron\Navigation\Navigator;
 use Phalanx\Theatron\Navigation\WorkspaceNavigator;
 use Phalanx\Theatron\Reactive\SignalRegistry;
 use Phalanx\Theatron\Rendering\Region;
@@ -74,7 +76,9 @@ final class TheatronApp
         }
 
         $navigator = new WorkspaceNavigator($mountSystem, $this->screens[0]);
+        $mountSystem->provide(Navigator::class, $navigator);
         $registry->activateScreen($this->screens[0]);
+        self::rebuildBindings($registry, $navigator);
 
         $ui = new Ui($this->theme);
         $renderDiagnostics = RenderDiagnostics::enabled();
@@ -156,7 +160,18 @@ final class TheatronApp
                             $target = $action->target;
                             $navigator->go($target);
                             $registry->activateScreen($target);
+                            self::rebuildBindings($registry, $navigator);
                             self::rebuildFocus($focus, $navigator);
+
+                            return;
+                        }
+
+                        if ($action->isBack()) {
+                            if ($navigator->back()) {
+                                $registry->activateScreen($navigator->active());
+                                self::rebuildBindings($registry, $navigator);
+                                self::rebuildFocus($focus, $navigator);
+                            }
 
                             return;
                         }
@@ -182,7 +197,14 @@ final class TheatronApp
                     }
                 }
 
+                $activeBeforeDispatch = $navigator->active();
                 $dispatcher->dispatch($event);
+
+                if ($navigator->active() !== $activeBeforeDispatch) {
+                    $registry->activateScreen($navigator->active());
+                    self::rebuildBindings($registry, $navigator);
+                    self::rebuildFocus($focus, $navigator);
+                }
             },
         );
 
@@ -220,6 +242,19 @@ final class TheatronApp
             foreach ($screen->focusables() as [$name, $focusable]) {
                 $focus->register($name, $focusable);
             }
+
+            if (in_array('input', $focus->names(), true)) {
+                $focus->focus('input');
+            }
+        }
+    }
+
+    private static function rebuildBindings(BindingRegistry $registry, WorkspaceNavigator $navigator): void
+    {
+        $screen = $navigator->activeWorkspace()->screen;
+
+        if ($screen instanceof DeclaresBindings) {
+            $registry->setScreen($screen::class, $screen->bindings());
         }
     }
 

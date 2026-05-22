@@ -15,6 +15,9 @@ class ConversationSlice
         private(set) array $messages = [],
         private(set) bool $isStreaming = false,
         private(set) string $thinkingBuffer = '',
+        private(set) int $scrollOffset = 0,
+        private(set) ?int $expandedIndex = null,
+        private(set) bool $showThinking = false,
     ) {
     }
 
@@ -32,6 +35,9 @@ class ConversationSlice
             messages: [...$this->messages, $message],
             isStreaming: $this->isStreaming,
             thinkingBuffer: $this->thinkingBuffer,
+            scrollOffset: 0,
+            expandedIndex: null,
+            showThinking: $this->showThinking,
         );
     }
 
@@ -70,6 +76,9 @@ class ConversationSlice
             messages: $messages,
             isStreaming: true,
             thinkingBuffer: $thinkingBuffer,
+            scrollOffset: 0,
+            expandedIndex: null,
+            showThinking: $this->showThinking,
         );
     }
 
@@ -92,6 +101,89 @@ class ConversationSlice
             messages: $messages,
             isStreaming: false,
             thinkingBuffer: '',
+            scrollOffset: $this->scrollOffset,
+            expandedIndex: $this->expandedIndex,
+            showThinking: $this->showThinking,
+        );
+    }
+
+    public function scrollUp(): self
+    {
+        $max = max(0, count($this->exchangeIndexes()) - 1);
+
+        return $this->withScroll(min($max, $this->scrollOffset + 1));
+    }
+
+    public function scrollDown(): self
+    {
+        return $this->withScroll(max(0, $this->scrollOffset - 1));
+    }
+
+    public function expandAtScroll(): self
+    {
+        if ($this->scrollOffset === 0) {
+            return $this;
+        }
+
+        $indexes = $this->exchangeIndexes();
+        $index = count($indexes) - $this->scrollOffset;
+
+        if (!isset($indexes[$index])) {
+            return $this;
+        }
+
+        return new self(
+            messages: $this->messages,
+            isStreaming: $this->isStreaming,
+            thinkingBuffer: $this->thinkingBuffer,
+            scrollOffset: $this->scrollOffset,
+            expandedIndex: $indexes[$index],
+            showThinking: $this->showThinking,
+        );
+    }
+
+    public function refocus(): self
+    {
+        return $this->withScroll(0);
+    }
+
+    public function toggleThinking(): self
+    {
+        return new self(
+            messages: $this->messages,
+            isStreaming: $this->isStreaming,
+            thinkingBuffer: $this->thinkingBuffer,
+            scrollOffset: $this->scrollOffset,
+            expandedIndex: $this->expandedIndex,
+            showThinking: !$this->showThinking,
+        );
+    }
+
+    /**
+     * @return list<int>
+     */
+    public function exchangeIndexes(): array
+    {
+        $indexes = [];
+
+        foreach ($this->messages as $i => $message) {
+            if ($message->role === 'user') {
+                $indexes[] = $i;
+            }
+        }
+
+        return $indexes;
+    }
+
+    private function withScroll(int $scrollOffset): self
+    {
+        return new self(
+            messages: $this->messages,
+            isStreaming: $this->isStreaming,
+            thinkingBuffer: $this->thinkingBuffer,
+            scrollOffset: $scrollOffset,
+            expandedIndex: null,
+            showThinking: $this->showThinking,
         );
     }
 }

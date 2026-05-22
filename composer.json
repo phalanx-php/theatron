@@ -70,6 +70,7 @@
         "phalanx-php/stoa": "dev-main as 0.6.0",
         "phalanx-php/surreal": "dev-main as 0.6.0",
         "phalanx-php/styx": "dev-main as 0.6.0",
+        "league/commonmark": "^2.7",
         "symfony/runtime": "^7.0"
     },
     "bin": ["bin/theatron"],

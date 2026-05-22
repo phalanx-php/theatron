@@ -9,6 +9,9 @@ use Phalanx\Theatron\State\Store;
 use Phalanx\Theatron\Template\Slice\ActivitySlice;
 use Phalanx\Theatron\Template\Slice\AgentRegistrySlice;
 use Phalanx\Theatron\Template\Slice\ConversationSlice;
+use Phalanx\Theatron\Template\Slice\InputSlice;
+use Phalanx\Theatron\Template\Slice\LlmRequestSlice;
+use Phalanx\Theatron\Template\Slice\SettingsSlice;
 
 class AppStore extends Store
 {
@@ -33,6 +36,27 @@ class AppStore extends Store
         }
     }
 
+    public InputSlice $input {
+        get => $this->read(InputSlice::class);
+        set {
+            $this->write(InputSlice::class, $value);
+        }
+    }
+
+    public LlmRequestSlice $requests {
+        get => $this->read(LlmRequestSlice::class);
+        set {
+            $this->write(LlmRequestSlice::class, $value);
+        }
+    }
+
+    public SettingsSlice $settings {
+        get => $this->read(SettingsSlice::class);
+        set {
+            $this->write(SettingsSlice::class, $value);
+        }
+    }
+
     public InputModeSlice $inputMode {
         get => $this->read(InputModeSlice::class);
         set {
@@ -45,6 +69,9 @@ class AppStore extends Store
         $this->register(ConversationSlice::class, new ConversationSlice());
         $this->register(AgentRegistrySlice::class, new AgentRegistrySlice());
         $this->register(ActivitySlice::class, new ActivitySlice());
+        $this->register(InputSlice::class, new InputSlice());
+        $this->register(LlmRequestSlice::class, new LlmRequestSlice());
+        $this->register(SettingsSlice::class, new SettingsSlice());
         $this->register(InputModeSlice::class, new InputModeSlice());
     }
 }

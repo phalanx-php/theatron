@@ -7,133 +7,137 @@ namespace Phalanx\Theatron\Tests\Unit\Template\Screen;
 use Phalanx\Scope\TaskScope;
 use Phalanx\Theatron\Component\MountSystem;
 use Phalanx\Theatron\Context\ScreenContext;
+use Phalanx\Theatron\Contract\DeclaresBindings;
+use Phalanx\Theatron\Contract\HasFocusables;
 use Phalanx\Theatron\Contract\HasStatusBar;
+use Phalanx\Theatron\Input\Key;
+use Phalanx\Theatron\Input\KeyEvent;
 use Phalanx\Theatron\Navigation\Navigator;
 use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Element\ColumnElement;
-use Phalanx\Theatron\Tdom\Element\DividerElement;
+use Phalanx\Theatron\Tdom\Element\InputElement;
 use Phalanx\Theatron\Tdom\Element\PanelElement;
-use Phalanx\Theatron\Tdom\Element\StatusLineElement;
+use Phalanx\Theatron\Tdom\Element\RowElement;
 use Phalanx\Theatron\Tdom\Element\TextElement;
+use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Tdom\Ui;
 use Phalanx\Theatron\Template\AppStore;
 use Phalanx\Theatron\Template\Screen\SettingsScreen;
+use Phalanx\Theatron\Template\Slice\ActivitySlice;
+use Phalanx\Theatron\Template\Slice\SettingsTab;
+use Phalanx\Theatron\Text\Line;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 final class SettingsScreenTest extends TestCase
 {
     #[Test]
-    public function rendersSettingsLayout(): void
+    public function rendersSettingsPageWithTabsAndGeneralControls(): void
     {
         $screen = new SettingsScreen(new AppStore());
-        $ctx = $this->makeContext();
-
-        $result = $screen($ctx);
+        $result = $screen($this->makeContext());
 
         self::assertInstanceOf(ColumnElement::class, $result);
 
-        $children = $result->children;
-        self::assertCount(5, $children);
-
-        self::assertInstanceOf(PanelElement::class, $children[0]);
-        self::assertInstanceOf(DividerElement::class, $children[1]);
-        self::assertInstanceOf(PanelElement::class, $children[2]);
-        self::assertInstanceOf(DividerElement::class, $children[3]);
-        self::assertInstanceOf(PanelElement::class, $children[4]);
+        $text = self::flatten($result);
+        self::assertStringContainsString('Settings', $text);
+        self::assertStringContainsString('General', $text);
+        self::assertStringContainsString('Tools', $text);
+        self::assertStringContainsString('MCP', $text);
+        self::assertStringContainsString('[ ] Line numbers in code blocks', $text);
+        self::assertStringContainsString('[x] Syntax highlighting', $text);
+        self::assertStringContainsString('[x] Compact history panels', $text);
     }
 
     #[Test]
-    public function implementsHasStatusBar(): void
-    {
-        self::assertInstanceOf(HasStatusBar::class, new SettingsScreen(new AppStore()));
-    }
-
-    #[Test]
-    public function statusBarRendersNormalModeAndLabel(): void
+    public function implementsPageInteractionContracts(): void
     {
         $screen = new SettingsScreen(new AppStore());
-        $ui = new Ui();
 
-        $result = $screen->statusBar($ui);
-
-        self::assertInstanceOf(StatusLineElement::class, $result);
+        self::assertInstanceOf(HasStatusBar::class, $screen);
+        self::assertInstanceOf(HasFocusables::class, $screen);
+        self::assertInstanceOf(DeclaresBindings::class, $screen);
+        self::assertSame('settings', $screen->focusables()[0][0]);
     }
 
     #[Test]
-    public function providerSectionShowsDefaults(): void
+    public function statusBarRendersSettingsControls(): void
     {
         $screen = new SettingsScreen(new AppStore());
-        $ctx = $this->makeContext();
 
-        $result = $screen($ctx);
-        self::assertInstanceOf(ColumnElement::class, $result);
+        $text = self::flatten($screen->statusBar(new Ui()));
 
-        $providerPanel = $result->children[0];
-        self::assertInstanceOf(PanelElement::class, $providerPanel);
-        self::assertSame('Provider', $providerPanel->title);
-
-        $inner = $providerPanel->child;
-        self::assertInstanceOf(ColumnElement::class, $inner);
-
-        $typeText = $inner->children[0];
-        self::assertInstanceOf(TextElement::class, $typeText);
-        self::assertIsString($typeText->content);
-        self::assertStringContainsString('Ollama', $typeText->content);
-
-        $urlText = $inner->children[1];
-        self::assertInstanceOf(TextElement::class, $urlText);
-        self::assertIsString($urlText->content);
-        self::assertStringContainsString('localhost', $urlText->content);
+        self::assertStringContainsString('← tab', $text);
+        self::assertStringContainsString('→ tab', $text);
+        self::assertStringContainsString('↑/↓ item', $text);
+        self::assertStringContainsString('Space toggle', $text);
+        self::assertStringContainsString('Esc back', $text);
     }
 
     #[Test]
-    public function modelSectionShowsDefault(): void
+    public function keyboardNavigationChangesTabsItemsAndToggles(): void
     {
-        $screen = new SettingsScreen(new AppStore());
-        $ctx = $this->makeContext();
+        $store = new AppStore();
+        $screen = new SettingsScreen($store);
 
-        $result = $screen($ctx);
-        self::assertInstanceOf(ColumnElement::class, $result);
+        self::assertSame(SettingsTab::General, $store->settings->activeTab);
 
-        $modelPanel = $result->children[2];
-        self::assertInstanceOf(PanelElement::class, $modelPanel);
-        self::assertSame('Model', $modelPanel->title);
+        self::assertTrue($screen->handleNormalKey(new KeyEvent(Key::Right)));
+        self::assertSame(SettingsTab::Tools, $store->settings->activeTab);
 
-        $inner = $modelPanel->child;
-        self::assertInstanceOf(ColumnElement::class, $inner);
+        self::assertTrue($screen->handleNormalKey(new KeyEvent(Key::Down)));
+        self::assertSame(1, $store->settings->selectedItem);
 
-        $nameText = $inner->children[0];
-        self::assertInstanceOf(TextElement::class, $nameText);
-        self::assertIsString($nameText->content);
-        self::assertStringContainsString('qwen2.5-coder:7b', $nameText->content);
+        self::assertFalse($store->settings->isEnabled(SettingsTab::Tools, 1));
+        self::assertTrue($screen->handleNormalKey(new KeyEvent(Key::Space)));
+        self::assertTrue($store->settings->isEnabled(SettingsTab::Tools, 1));
     }
 
     #[Test]
-    public function activitySectionShowsDefaults(): void
+    public function modelTabReflectsActivityModelName(): void
     {
-        $screen = new SettingsScreen(new AppStore());
-        $ctx = $this->makeContext();
+        $store = new AppStore();
+        $store->activity = new ActivitySlice()->withModelName('qwen3:4b');
+        $store->settings = $store->settings->nextTab()->nextTab()->nextTab();
+        $screen = new SettingsScreen($store);
 
-        $result = $screen($ctx);
-        self::assertInstanceOf(ColumnElement::class, $result);
+        $text = self::flatten($screen($this->makeContext()));
 
-        $activityPanel = $result->children[4];
-        self::assertInstanceOf(PanelElement::class, $activityPanel);
-        self::assertSame('Activity', $activityPanel->title);
+        self::assertStringContainsString('Model: qwen3:4b', $text);
+    }
 
-        $inner = $activityPanel->child;
-        self::assertInstanceOf(ColumnElement::class, $inner);
+    private static function flatten(Renderable|string $renderable): string
+    {
+        if (is_string($renderable)) {
+            return $renderable;
+        }
 
-        $invocationsText = $inner->children[0];
-        self::assertInstanceOf(TextElement::class, $invocationsText);
-        self::assertIsString($invocationsText->content);
-        self::assertStringContainsString('3', $invocationsText->content);
+        if ($renderable instanceof TextElement) {
+            return self::lineToText($renderable->content);
+        }
 
-        $timeoutText = $inner->children[1];
-        self::assertInstanceOf(TextElement::class, $timeoutText);
-        self::assertIsString($timeoutText->content);
-        self::assertStringContainsString('none', $timeoutText->content);
+        if ($renderable instanceof InputElement) {
+            return self::lineToText($renderable->prompt) . $renderable->value;
+        }
+
+        if ($renderable instanceof ColumnElement || $renderable instanceof RowElement) {
+            return implode("\n", array_map(self::flatten(...), $renderable->children));
+        }
+
+        if ($renderable instanceof PanelElement) {
+            return self::lineToText($renderable->title) . "\n" . self::flatten($renderable->child);
+        }
+
+        return '';
+    }
+
+    private static function lineToText(string|Line $content): string
+    {
+        if (is_string($content)) {
+            return $content;
+        }
+
+        return implode('', array_map(static fn($span): string => $span->content, $content->spans));
     }
 
     private function makeContext(): ScreenContext

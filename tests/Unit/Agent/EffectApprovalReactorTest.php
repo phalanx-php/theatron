@@ -31,6 +31,11 @@ final class RecordingNavigator implements Navigator
     {
     }
 
+    public function back(): bool
+    {
+        return false;
+    }
+
     /** @param class-string<\Phalanx\Theatron\Contract\Component> $component */
     public function overlay(string $component, mixed ...$params): void
     {

@@ -17,6 +17,9 @@ final class WorkspaceNavigator implements Navigator
     /** @var list<MountedComponent> */
     private array $overlayStack = [];
 
+    /** @var list<class-string<Screen>> */
+    private array $history = [];
+
     /**
      * @param class-string<Screen> $activeScreen
      */
@@ -36,11 +39,25 @@ final class WorkspaceNavigator implements Navigator
             return;
         }
 
+        $this->history[] = $this->activeScreen;
         $this->activeScreen = $screen;
 
         if (!isset($this->workspaces[$screen])) {
             $this->workspaces[$screen] = $this->mountSystem->mountScreen($screen);
         }
+    }
+
+    public function back(): bool
+    {
+        $screen = array_pop($this->history);
+
+        if ($screen === null) {
+            return false;
+        }
+
+        $this->activeScreen = $screen;
+
+        return true;
     }
 
     /**

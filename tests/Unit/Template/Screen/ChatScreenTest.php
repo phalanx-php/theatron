@@ -12,16 +12,18 @@ use Phalanx\Theatron\Input\KeyEvent;
 use Phalanx\Theatron\Navigation\Navigator;
 use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Element\ColumnElement;
+use Phalanx\Theatron\Tdom\Element\InputElement;
 use Phalanx\Theatron\Tdom\Element\PanelElement;
-use Phalanx\Theatron\Tdom\Element\SpinnerElement;
-use Phalanx\Theatron\Tdom\Element\StatusLineElement;
+use Phalanx\Theatron\Tdom\Element\RowElement;
 use Phalanx\Theatron\Tdom\Element\TextElement;
+use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Tdom\Ui;
 use Phalanx\Theatron\Template\AppStore;
 use Phalanx\Theatron\Template\Screen\ChatConversationHandler;
 use Phalanx\Theatron\Template\Screen\ChatInputHandler;
 use Phalanx\Theatron\Template\Screen\ChatScreen;
 use Phalanx\Theatron\Template\Slice\ActivitySlice;
+use Phalanx\Theatron\Template\Slice\ActivityStatus;
 use Phalanx\Theatron\Template\Slice\ConversationSlice;
 use Phalanx\Theatron\Text\Line;
 use PHPUnit\Framework\Attributes\Test;
@@ -30,105 +32,69 @@ use PHPUnit\Framework\TestCase;
 final class ChatScreenTest extends TestCase
 {
     #[Test]
-    public function renderEmptyConversation(): void
+    public function rendersEmptyConversationWithReplShell(): void
     {
         $store = new AppStore();
         $screen = new ChatScreen($store);
-        $ctx = $this->makeContext($store);
+        $result = $screen($this->makeContext($store));
 
-        $result = $screen($ctx);
-
-        // Root is a three-child column: conversation panel, streaming indicator, input panel.
         self::assertInstanceOf(ColumnElement::class, $result);
-        self::assertCount(3, $result->children);
+        self::assertCount(7, $result->children);
 
-        // [0] bordered conversation panel
-        self::assertInstanceOf(PanelElement::class, $result->children[0]);
-
-        // Empty state child is a TextElement
-        $panel = $result->children[0];
-        self::assertInstanceOf(PanelElement::class, $panel);
-        self::assertSame('Conversation', $panel->title);
-        self::assertInstanceOf(TextElement::class, $panel->child);
-
-        // Empty state text is a Line (rich styled content)
-        $textEl = $panel->child;
-        self::assertInstanceOf(TextElement::class, $textEl);
-        self::assertInstanceOf(Line::class, $textEl->content);
-
-        // [2] input panel
-        self::assertInstanceOf(PanelElement::class, $result->children[2]);
-        $inputPanel = $result->children[2];
-        self::assertSame('Input', $inputPanel->title);
+        $text = self::flatten($result);
+        self::assertStringContainsString('Theatron', $text);
+        self::assertStringContainsString('Powered by Phalanx PHP', $text);
+        self::assertStringContainsString('Type a message to begin.', $text);
+        self::assertStringContainsString('Λ idle', $text);
+        self::assertStringContainsString('+> ', $text);
     }
 
     #[Test]
-    public function renderWithMessages(): void
+    public function rendersSummariesAndExpandedCurrentExchange(): void
     {
         $store = new AppStore();
         $store->conversation = new ConversationSlice()
-            ->addUserMessage('Advance the phalanx, Leonidas commands it.')
-            ->appendToken('By Zeus, we hold the pass at Thermopylae.');
+            ->addUserMessage('adding a couple messages')
+            ->appendToken('Strategic Guidance The Hellespont is optimal for a flanking maneuver.')
+            ->finalizeMessage()
+            ->addUserMessage('and more')
+            ->appendToken('Second preview should show in history.')
+            ->finalizeMessage()
+            ->addUserMessage('and another')
+            ->appendToken('Final answer stays expanded.');
 
         $screen = new ChatScreen($store);
-        $ctx = $this->makeContext($store);
 
-        $result = $screen($ctx);
+        $text = self::flatten($screen($this->makeContext($store)));
 
-        self::assertInstanceOf(ColumnElement::class, $result);
-
-        $panel = $result->children[0];
-        self::assertInstanceOf(PanelElement::class, $panel);
-
-        // With messages the child is a ColumnElement of TextElement rows.
-        $body = $panel->child;
-        self::assertInstanceOf(ColumnElement::class, $body);
-        self::assertCount(2, $body->children);
-
-        // Each row is a TextElement containing a Line (Span::styled rich content).
-        foreach ($body->children as $row) {
-            self::assertInstanceOf(TextElement::class, $row);
-            self::assertInstanceOf(Line::class, $row->content);
-        }
-
-        // Spot-check span content includes role labels and message text.
-        $userRow = $body->children[0];
-        self::assertInstanceOf(TextElement::class, $userRow);
-        $userLine = $userRow->content;
-        self::assertInstanceOf(Line::class, $userLine);
-        $combined = implode('', array_map(static fn($s) => $s->content, $userLine->spans));
-        self::assertStringContainsString('You:', $combined);
-        self::assertStringContainsString('Advance the phalanx', $combined);
-
-        $assistantRow = $body->children[1];
-        self::assertInstanceOf(TextElement::class, $assistantRow);
-        $assistantLine = $assistantRow->content;
-        self::assertInstanceOf(Line::class, $assistantLine);
-        $combined2 = implode('', array_map(static fn($s) => $s->content, $assistantLine->spans));
-        self::assertStringContainsString('Assistant:', $combined2);
-        self::assertStringContainsString('Thermopylae', $combined2);
+        self::assertStringContainsString('> adding a couple messages', $text);
+        self::assertStringContainsString('Strategic Guidance The Hellespont', $text);
+        self::assertStringContainsString('> and more', $text);
+        self::assertStringContainsString('Second preview should show', $text);
+        self::assertStringContainsString('you: and another', $text);
+        self::assertStringContainsString('assistant:', $text);
+        self::assertStringContainsString('Final answer stays expanded.', $text);
     }
 
     #[Test]
-    public function statusBarRenders(): void
+    public function statusBarRendersPocControls(): void
     {
-        $store = new AppStore();
-        $store->activity = new ActivitySlice()->updateUsage(300, 900);
-        $screen = new ChatScreen($store);
-        $ui = new Ui();
+        $screen = new ChatScreen(new AppStore());
 
-        $result = $screen->statusBar($ui);
+        $text = self::flatten($screen->statusBar(new Ui()));
 
-        self::assertInstanceOf(StatusLineElement::class, $result);
-        // StatusBar::render() produces sections from left/right/section calls.
-        self::assertNotEmpty($result->sections);
+        self::assertStringContainsString('^P up', $text);
+        self::assertStringContainsString('^N down', $text);
+        self::assertStringContainsString('^D devtools', $text);
+        self::assertStringContainsString('^S settings', $text);
+        self::assertStringContainsString('Enter send', $text);
+        self::assertStringContainsString('^C quit', $text);
     }
 
     #[Test]
-    public function focusablesReturnsTwoEntries(): void
+    public function focusablesExposeConversationAndInputHandlers(): void
     {
-        $store = new AppStore();
-        $screen = new ChatScreen($store);
+        $screen = new ChatScreen(new AppStore());
 
         $focusables = $screen->focusables();
 
@@ -140,106 +106,89 @@ final class ChatScreenTest extends TestCase
     }
 
     #[Test]
-    public function scrollDown(): void
+    public function scrollingMovesThroughConversationExchanges(): void
     {
         $store = new AppStore();
-
-        // Add 15 messages so maxScroll > 0.
-        $conv = new ConversationSlice();
-        for ($i = 1; $i <= 15; $i++) {
-            $conv = $conv->addUserMessage("Hoplite {$i} holds the line.");
-        }
-        $store->conversation = $conv;
-
+        $store->conversation = $this->conversationWithUserMessages(4);
         $screen = new ChatScreen($store);
 
-        // Reflect to read private scrollOffset.
-        $offsetProp = new \ReflectionProperty(ChatScreen::class, 'scrollOffset');
+        self::assertSame(0, $store->conversation->scrollOffset);
 
-        self::assertSame(0, $offsetProp->getValue($screen));
+        self::assertTrue($screen->handleScroll(new KeyEvent(Key::Up)));
+        self::assertSame(1, $store->conversation->scrollOffset);
 
-        $screen->handleScroll(new KeyEvent('j'));
-        self::assertSame(1, $offsetProp->getValue($screen));
+        self::assertTrue($screen->handleScroll(new KeyEvent('k')));
+        self::assertSame(2, $store->conversation->scrollOffset);
 
-        $screen->handleScroll(new KeyEvent(Key::Down));
-        self::assertSame(2, $offsetProp->getValue($screen));
+        self::assertTrue($screen->handleScroll(new KeyEvent(Key::Down)));
+        self::assertSame(1, $store->conversation->scrollOffset);
+
+        self::assertTrue($screen->handleScroll(new KeyEvent('j')));
+        self::assertSame(0, $store->conversation->scrollOffset);
     }
 
     #[Test]
-    public function scrollUp(): void
-    {
-        $store = new AppStore();
-        $conv = new ConversationSlice();
-        for ($i = 1; $i <= 15; $i++) {
-            $conv = $conv->addUserMessage("Hoplite {$i} holds the line.");
-        }
-        $store->conversation = $conv;
-
-        $screen = new ChatScreen($store);
-        $offsetProp = new \ReflectionProperty(ChatScreen::class, 'scrollOffset');
-
-        // Move down first, then back up.
-        $screen->handleScroll(new KeyEvent('j'));
-        $screen->handleScroll(new KeyEvent('j'));
-        self::assertSame(2, $offsetProp->getValue($screen));
-
-        $screen->handleScroll(new KeyEvent('k'));
-        self::assertSame(1, $offsetProp->getValue($screen));
-
-        $screen->handleScroll(new KeyEvent(Key::Up));
-        self::assertSame(0, $offsetProp->getValue($screen));
-    }
-
-    #[Test]
-    public function scrollGoToEnd(): void
-    {
-        $store = new AppStore();
-        $conv = new ConversationSlice();
-        for ($i = 1; $i <= 20; $i++) {
-            $conv = $conv->addUserMessage("Leonidas message {$i}.");
-        }
-        $store->conversation = $conv;
-
-        $screen = new ChatScreen($store);
-        $offsetProp = new \ReflectionProperty(ChatScreen::class, 'scrollOffset');
-
-        $screen->handleScroll(new KeyEvent('G'));
-        // maxScroll = max(0, 20 - 12) = 8
-        self::assertSame(8, $offsetProp->getValue($screen));
-    }
-
-    #[Test]
-    public function submitInput(): void
+    public function submitInputAddsUserMessageAndStartsActivity(): void
     {
         $store = new AppStore();
         $screen = new ChatScreen($store);
 
         $screen->inputText->set('Rally the phalanx at the agora.');
-        $screen->submitInput();
 
-        $messages = $store->conversation->messages;
-        self::assertCount(1, $messages);
-        self::assertSame('user', $messages[0]->role);
-        self::assertSame('Rally the phalanx at the agora.', $messages[0]->text);
-
-        // Composer must be cleared after submit.
+        self::assertTrue($screen->submitInput());
+        self::assertCount(1, $store->conversation->messages);
+        self::assertSame('user', $store->conversation->messages[0]->role);
+        self::assertSame('Rally the phalanx at the agora.', $store->conversation->messages[0]->text);
+        self::assertSame(ActivityStatus::Running, $store->activity->status);
         self::assertSame('', $screen->inputText->get());
+        self::assertSame('', $store->input->text);
     }
 
     #[Test]
-    public function submitInputIgnoresEmptyText(): void
+    public function submitInputQueuesWhenActivityIsBusy(): void
+    {
+        $store = new AppStore();
+        $store->activity = new ActivitySlice()->withStatus(ActivityStatus::Running);
+        $screen = new ChatScreen($store);
+
+        $screen->inputText->set('Queue this while thinking.');
+
+        self::assertTrue($screen->submitInput());
+        self::assertSame([], $store->conversation->messages);
+        self::assertSame(['Queue this while thinking.'], $store->input->queue);
+    }
+
+    #[Test]
+    public function inputHandlerEnterSubmitsText(): void
     {
         $store = new AppStore();
         $screen = new ChatScreen($store);
+        $handler = new ChatInputHandler($screen);
 
-        $screen->inputText->set('');
-        $screen->submitInput();
+        $screen->inputText->set('Form the phalanx.');
 
-        self::assertSame([], $store->conversation->messages);
+        self::assertTrue($handler->handleInput(new KeyEvent(Key::Enter)));
+        self::assertCount(1, $store->conversation->messages);
+        self::assertSame('Form the phalanx.', $store->conversation->messages[0]->text);
     }
 
     #[Test]
-    public function inputHandlerDelegatesToTextBehavior(): void
+    public function inputHandlerEnterExpandsScrolledHistoryInsteadOfSubmitting(): void
+    {
+        $store = new AppStore();
+        $store->conversation = $this->conversationWithUserMessages(3)->scrollUp();
+        $screen = new ChatScreen($store);
+        $handler = new ChatInputHandler($screen);
+
+        $screen->inputText->set('This should not submit yet.');
+
+        self::assertTrue($handler->handleInput(new KeyEvent(Key::Enter)));
+        self::assertNotNull($store->conversation->expandedIndex);
+        self::assertCount(3, $store->conversation->messages);
+    }
+
+    #[Test]
+    public function inputHandlerDelegatesTextEditingAndSyncsInputSlice(): void
     {
         $store = new AppStore();
         $screen = new ChatScreen($store);
@@ -251,122 +200,74 @@ final class ChatScreenTest extends TestCase
         $handler->handleInput(new KeyEvent('s'));
 
         self::assertSame('Zeus', $screen->inputText->get());
+        self::assertSame('Zeus', $store->input->text);
 
-        // Backspace removes last char.
         $handler->handleInput(new KeyEvent(Key::Backspace));
+
         self::assertSame('Zeu', $screen->inputText->get());
+        self::assertSame('Zeu', $store->input->text);
     }
 
     #[Test]
-    public function streamingIndicatorShownWhenRunning(): void
+    public function thinkingStatusLineShowsQueueCount(): void
     {
         $store = new AppStore();
-        $store->conversation = new ConversationSlice()
-            ->addUserMessage('What does the oracle say?')
-            ->appendToken('The oracle speaks...');
-
-        self::assertTrue($store->conversation->isStreaming);
-        // appendToken sets isStreaming but ActivitySlice status is still Idle by default.
-        // The screen checks activity->status === Running for the spinner.
-        $store->activity = new ActivitySlice()->effectResolved(); // sets Running
-
+        $store->activity = new ActivitySlice()->withStatus(ActivityStatus::Running);
         $screen = new ChatScreen($store);
-        $ctx = $this->makeContext($store);
+        $screen->inputText->set('first');
+        $screen->submitInput();
+        $screen->inputText->set('second');
+        $screen->submitInput();
 
-        $result = $screen($ctx);
-        self::assertInstanceOf(ColumnElement::class, $result);
+        $text = self::flatten($screen($this->makeContext($store)));
 
-        $indicator = $result->children[1];
-        self::assertInstanceOf(SpinnerElement::class, $indicator);
-        self::assertSame('Streaming...', $indicator->label);
+        self::assertStringContainsString('Λ running', $text);
+        self::assertStringContainsString('2 queued', $text);
     }
 
-    #[Test]
-    public function streamingIndicatorHiddenWhenIdle(): void
+    private static function flatten(Renderable|string $renderable): string
     {
-        $store = new AppStore();
-
-        $screen = new ChatScreen($store);
-        $ctx = $this->makeContext($store);
-
-        $result = $screen($ctx);
-        self::assertInstanceOf(ColumnElement::class, $result);
-
-        $indicator = $result->children[1];
-        self::assertInstanceOf(TextElement::class, $indicator);
-    }
-
-    #[Test]
-    public function scrollUpClampsAtZero(): void
-    {
-        $store = new AppStore();
-        $conv = new ConversationSlice();
-        for ($i = 1; $i <= 15; $i++) {
-            $conv = $conv->addUserMessage("Spartan {$i} stands ready.");
+        if (is_string($renderable)) {
+            return $renderable;
         }
-        $store->conversation = $conv;
 
-        $screen = new ChatScreen($store);
-        $offsetProp = new \ReflectionProperty(ChatScreen::class, 'scrollOffset');
-
-        self::assertSame(0, $offsetProp->getValue($screen));
-
-        // Press 'k' (up) at offset 0 — should stay at 0.
-        $screen->handleScroll(new KeyEvent('k'));
-        self::assertSame(0, $offsetProp->getValue($screen));
-    }
-
-    #[Test]
-    public function scrollDownClampsAtMax(): void
-    {
-        $store = new AppStore();
-        $conv = new ConversationSlice();
-        for ($i = 1; $i <= 15; $i++) {
-            $conv = $conv->addUserMessage("Pericles decree {$i}.");
+        if ($renderable instanceof TextElement) {
+            return self::lineToText($renderable->content);
         }
-        $store->conversation = $conv;
 
-        $screen = new ChatScreen($store);
-        $offsetProp = new \ReflectionProperty(ChatScreen::class, 'scrollOffset');
+        if ($renderable instanceof InputElement) {
+            return self::lineToText($renderable->prompt) . $renderable->value;
+        }
 
-        // maxScroll = max(0, 15 - 12) = 3. Jump to end.
-        $screen->handleScroll(new KeyEvent('G'));
-        self::assertSame(3, $offsetProp->getValue($screen));
+        if ($renderable instanceof ColumnElement || $renderable instanceof RowElement) {
+            return implode("\n", array_map(self::flatten(...), $renderable->children));
+        }
 
-        // Press 'j' (down) at max — should stay at 3.
-        $screen->handleScroll(new KeyEvent('j'));
-        self::assertSame(3, $offsetProp->getValue($screen));
+        if ($renderable instanceof PanelElement) {
+            return self::lineToText($renderable->title) . "\n" . self::flatten($renderable->child);
+        }
+
+        return '';
     }
 
-    #[Test]
-    public function inputHandlerEnterSubmitsText(): void
+    private static function lineToText(string|Line $content): string
     {
-        $store = new AppStore();
-        $screen = new ChatScreen($store);
-        $handler = new ChatInputHandler($screen);
+        if (is_string($content)) {
+            return $content;
+        }
 
-        $screen->inputText->set('Form the phalanx.');
-        $result = $handler->handleInput(new KeyEvent(Key::Enter));
-
-        self::assertTrue($result);
-        self::assertCount(1, $store->conversation->messages);
-        self::assertSame('user', $store->conversation->messages[0]->role);
-        self::assertSame('Form the phalanx.', $store->conversation->messages[0]->text);
-        self::assertSame('', $screen->inputText->get());
+        return implode('', array_map(static fn($span): string => $span->content, $content->spans));
     }
 
-    #[Test]
-    public function inputHandlerEnterOnEmptyDoesNotSubmit(): void
+    private function conversationWithUserMessages(int $count): ConversationSlice
     {
-        $store = new AppStore();
-        $screen = new ChatScreen($store);
-        $handler = new ChatInputHandler($screen);
+        $conversation = new ConversationSlice();
 
-        // inputText is '' by default.
-        $result = $handler->handleInput(new KeyEvent(Key::Enter));
+        for ($i = 1; $i <= $count; $i++) {
+            $conversation = $conversation->addUserMessage("Message {$i}.");
+        }
 
-        self::assertFalse($result);
-        self::assertSame([], $store->conversation->messages);
+        return $conversation;
     }
 
     private function makeContext(AppStore $store): ScreenContext

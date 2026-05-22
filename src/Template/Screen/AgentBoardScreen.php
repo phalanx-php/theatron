@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Phalanx\Theatron\Template\Screen;
 
+use Phalanx\Theatron\Context\RenderEnvironment;
 use Phalanx\Theatron\Context\ScreenContext;
 use Phalanx\Theatron\Contract\Focusable;
 use Phalanx\Theatron\Contract\HasFocusables;
@@ -18,20 +19,17 @@ use Phalanx\Theatron\Style\Color;
 use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Tdom\Style as TdomStyle;
-use Phalanx\Theatron\Tdom\Ui;
 use Phalanx\Theatron\Template\AppStore;
 use Phalanx\Theatron\Template\Slice\AgentRegistrySlice;
 use Phalanx\Theatron\Template\Slice\AgentSummary;
 use Phalanx\Theatron\Text\Line;
 use Phalanx\Theatron\Text\Span;
 
-/**
- * Agent board screen: bordered agent cards with capability badges, active/selected
- * indicators, j/k navigation, and a status bar with agent count.
- *
- * Focusable area:
- *   'agents' — NormalModeHandler on $this for j/k navigation through the list
- */
+use function Phalanx\Theatron\Ui\column;
+use function Phalanx\Theatron\Ui\panel;
+use function Phalanx\Theatron\Ui\row;
+use function Phalanx\Theatron\Ui\text;
+
 class AgentBoardScreen implements Screen, HasStatusBar, HasFocusables, NormalModeHandler
 {
     private int $selectedIndex = 0;
@@ -45,21 +43,21 @@ class AgentBoardScreen implements Screen, HasStatusBar, HasFocusables, NormalMod
     {
         $agents = $this->store->agents;
 
-        return $ctx->ui->column(
-            self::renderAgentCards($ctx->ui, $ctx->theme, $agents, $this->selectedIndex),
+        return column(
+            self::renderAgentCards($ctx->theme, $agents, $this->selectedIndex),
         );
     }
 
-    public function statusBar(Ui $ui): Renderable
+    public function statusBar(): Renderable
     {
         $inputMode = $this->store->inputMode;
         $agentCount = count($this->store->agents->agents);
 
-        return StatusBar::new(theme: $ui->theme)
+        return StatusBar::new(theme: RenderEnvironment::theme())
             ->section($inputMode->mode->label(), $inputMode->mode->color())
             ->left('Board')
             ->right(sprintf('Agents: %d', $agentCount))
-            ->render($ui);
+            ->render();
     }
 
     /** @return list<array{string, Focusable}> */
@@ -92,20 +90,18 @@ class AgentBoardScreen implements Screen, HasStatusBar, HasFocusables, NormalMod
     }
 
     private static function renderAgentCards(
-        Ui $ui,
         Theme $theme,
         AgentRegistrySlice $agents,
         int $selectedIndex,
     ): Renderable {
         if ($agents->agents === []) {
-            return $ui->text(
+            return text(
                 Line::from(Span::styled('No agents registered', $theme->muted)),
             );
         }
 
         $cards = array_map(
             static fn (AgentSummary $agent, int $i) => self::renderAgentCard(
-                $ui,
                 $theme,
                 $agent,
                 $agents->activeAgentId,
@@ -115,11 +111,10 @@ class AgentBoardScreen implements Screen, HasStatusBar, HasFocusables, NormalMod
             array_keys($agents->agents),
         );
 
-        return $ui->row(...$cards);
+        return row(...$cards);
     }
 
     private static function renderAgentCard(
-        Ui $ui,
         Theme $theme,
         AgentSummary $agent,
         ?string $activeAgentId,
@@ -140,17 +135,17 @@ class AgentBoardScreen implements Screen, HasStatusBar, HasFocusables, NormalMod
         $nameStyle = $isActive
             ? $theme->accent->bold()
             : $theme->bright;
-        $lines[] = $ui->text(Line::from(Span::styled($agent->name, $nameStyle)));
+        $lines[] = text(Line::from(Span::styled($agent->name, $nameStyle)));
 
-        $lines[] = $ui->text(Line::from(Span::styled($agent->id, $theme->muted)));
+        $lines[] = text(Line::from(Span::styled($agent->id, $theme->muted)));
 
         if ($agent->capabilities !== []) {
-            $lines[] = $ui->text(
+            $lines[] = text(
                 Line::from(Span::styled('Capabilities:', $theme->subtle)),
             );
 
             foreach ($agent->capabilities as $capability) {
-                $lines[] = $ui->text(
+                $lines[] = text(
                     Line::from(
                         Span::styled('  • ', $theme->hint),
                         Span::styled($capability, $theme->bright),
@@ -160,11 +155,11 @@ class AgentBoardScreen implements Screen, HasStatusBar, HasFocusables, NormalMod
         }
 
         if ($isActive) {
-            $lines[] = $ui->text(
+            $lines[] = text(
                 Line::from(Span::styled('Active', $theme->accent->bold())),
             );
         }
 
-        return $ui->panel($agent->name, $ui->column(...$lines), style: $panelStyle);
+        return panel($agent->name, column(...$lines), style: $panelStyle);
     }
 }

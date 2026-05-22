@@ -31,7 +31,6 @@ use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Painter\PaintContext;
 use Phalanx\Theatron\Tdom\Painter\Painter;
 use Phalanx\Theatron\Tdom\Renderable;
-use Phalanx\Theatron\Tdom\Ui;
 use Phalanx\Worker\WorkerTask;
 use PHPUnit\Framework\Attributes\Test;
 use RuntimeException;
@@ -303,7 +302,6 @@ final class MemoryDisposalChurnTest extends PhalanxTestCase
     {
         return new RenderContext(
             $this->createStub(Scope::class),
-            new Ui(),
             Theme::default(),
             $system,
         );
@@ -391,7 +389,7 @@ final class SlotChurnChild implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text($this->label . ':' . (string) $this->signal->get());
+        return \Phalanx\Theatron\Ui\text($this->label . ':' . (string) $this->signal->get());
     }
 }
 

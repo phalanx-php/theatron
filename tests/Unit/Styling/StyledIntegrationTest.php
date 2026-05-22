@@ -22,7 +22,6 @@ use Phalanx\Theatron\Tdom\Painter\PaintContext;
 use Phalanx\Theatron\Tdom\Painter\Painter;
 use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Tdom\Style;
-use Phalanx\Theatron\Tdom\Ui;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -99,7 +98,7 @@ final class StyledIntegrationTest extends TestCase
 
         $scope = $this->createStub(\Phalanx\Scope\Scope::class);
         $mountSystem = new MountSystem($scope);
-        $ctx = new RenderContext($scope, new Ui(), Theme::default(), $mountSystem);
+        $ctx = new RenderContext($scope, Theme::default(), $mountSystem);
 
         self::assertNull($mounted->stylesheet());
 
@@ -118,7 +117,7 @@ final class StyledIntegrationTest extends TestCase
 
         $scope = $this->createStub(\Phalanx\Scope\Scope::class);
         $mountSystem = new MountSystem($scope);
-        $ctx = new RenderContext($scope, new Ui(), Theme::default(), $mountSystem);
+        $ctx = new RenderContext($scope, Theme::default(), $mountSystem);
 
         $mounted->render($ctx);
 
@@ -135,7 +134,7 @@ final class StyledIntegrationTest extends TestCase
 
         $scope = $this->createStub(\Phalanx\Scope\Scope::class);
         $mountSystem = new MountSystem($scope);
-        $ctx = new RenderContext($scope, new Ui(), Theme::default(), $mountSystem);
+        $ctx = new RenderContext($scope, Theme::default(), $mountSystem);
 
         $mounted->render($ctx);
         $first = $mounted->stylesheet();
@@ -157,7 +156,7 @@ final class StyledIntegrationTest extends TestCase
 
         $scope = $this->createStub(\Phalanx\Scope\Scope::class);
         $mountSystem = new MountSystem($scope);
-        $ctx = new RenderContext($scope, new Ui(), Theme::default(), $mountSystem);
+        $ctx = new RenderContext($scope, Theme::default(), $mountSystem);
 
         $mounted->render($ctx);
 
@@ -183,12 +182,12 @@ final class StyledIntegrationTest extends TestCase
         $mountSystem = new MountSystem($scope);
 
         $theme1 = Theme::default();
-        $ctx1 = new RenderContext($scope, new Ui(), $theme1, $mountSystem);
+        $ctx1 = new RenderContext($scope, $theme1, $mountSystem);
         $mounted->render($ctx1);
         $first = $mounted->stylesheet();
 
         $theme2 = Theme::default();
-        $ctx2 = new RenderContext($scope, new Ui(), $theme2, $mountSystem);
+        $ctx2 = new RenderContext($scope, $theme2, $mountSystem);
         $mounted->markDirty();
         $mounted->render($ctx2);
         $second = $mounted->stylesheet();
@@ -206,7 +205,7 @@ final class StyledIntegrationTest extends TestCase
 
         $scope = $this->createStub(\Phalanx\Scope\Scope::class);
         $mountSystem = new MountSystem($scope);
-        $ctx = new RenderContext($scope, new Ui(), Theme::default(), $mountSystem);
+        $ctx = new RenderContext($scope, Theme::default(), $mountSystem);
 
         $mounted->render($ctx);
         self::assertNotNull($mounted->stylesheet());
@@ -225,7 +224,7 @@ final class OlympianStyledComponent implements Component, Styled
 {
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text('Olympus');
+        return \Phalanx\Theatron\Ui\text('Olympus');
     }
 
     public function stylesheet(Theme $theme): Stylesheet
@@ -240,7 +239,7 @@ final class OlympianBgStyledComponent implements Component, Styled
 {
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text('Sparta');
+        return \Phalanx\Theatron\Ui\text('Sparta');
     }
 
     public function stylesheet(Theme $theme): Stylesheet
@@ -255,6 +254,6 @@ final class OlympianPlainComponent implements Component
 {
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text('Agora');
+        return \Phalanx\Theatron\Ui\text('Agora');
     }
 }

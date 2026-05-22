@@ -20,7 +20,7 @@ final class HasFocusablesTest extends TestCase
         $screen = new class () implements Screen, HasFocusables {
             public function __invoke(ScreenContext $ctx): Renderable
             {
-                return $ctx->ui->text('Sparta');
+                return \Phalanx\Theatron\Ui\text('Sparta');
             }
 
             /** @return list<array{string, Focusable}> */

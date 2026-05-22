@@ -81,7 +81,9 @@ use Phalanx\Theatron\Context\RenderContext;
 use Phalanx\Theatron\Contract\Component;
 use Phalanx\Theatron\Tdom\Renderable;
 
-final class Greeting implements Component
+use function Phalanx\Theatron\Ui\text;
+
+class Greeting implements Component
 {
     public function __construct(
         private(set) string $name = 'Leonidas',
@@ -90,21 +92,22 @@ final class Greeting implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text("Hail, {$this->name}.");
+        return text("Hail, {$this->name}.");
     }
 }
 ```
 
-Mount children through the context. `mount()` returns a `MountedComponent`, so
-render it with the same context when you want the child output in the current
-tree.
+Mount children with the free `mount()` helper. Runtime params are named props.
 
 ```php
+use function Phalanx\Theatron\Ui\mount;
+use function Phalanx\Theatron\Ui\panel;
+
 public function __invoke(RenderContext $ctx): Renderable
 {
-    return $ctx->ui->panel(
+    return panel(
         'Greeting',
-        $ctx->mount(Greeting::class, name: 'Themistocles')->render($ctx),
+        mount(Greeting::class, name: 'Themistocles'),
     );
 }
 ```
@@ -122,7 +125,9 @@ use Phalanx\Theatron\Contract\Component;
 use Phalanx\Theatron\Reactive\Signal;
 use Phalanx\Theatron\Tdom\Renderable;
 
-final class Counter implements Component
+use function Phalanx\Theatron\Ui\text;
+
+class Counter implements Component
 {
     public function __construct(
         private(set) Signal $count = new Signal(0),
@@ -131,7 +136,7 @@ final class Counter implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text('Count: ' . $this->count->get());
+        return text('Count: ' . $this->count->get());
     }
 
     public function increment(): void
@@ -150,7 +155,7 @@ but it does not dispose them when it unmounts.
 ## Screens
 
 A screen implements `Screen`. It receives a `ScreenContext`, which carries the
-screen scope, UI factory, theme, navigator, and mount system.
+screen scope, theme, navigator, and mount system.
 
 ```php
 use Phalanx\Theatron\Context\ScreenContext;
@@ -158,7 +163,10 @@ use Phalanx\Theatron\Contract\Screen;
 use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Template\AppStore;
 
-final class DashboardScreen implements Screen
+use function Phalanx\Theatron\Ui\column;
+use function Phalanx\Theatron\Ui\text;
+
+class DashboardScreen implements Screen
 {
     public function __construct(
         private(set) AppStore $store,
@@ -167,9 +175,9 @@ final class DashboardScreen implements Screen
 
     public function __invoke(ScreenContext $ctx): Renderable
     {
-        return $ctx->ui->column(
-            $ctx->ui->text('Dashboard'),
-            $ctx->ui->text('Messages: ' . count($this->store->conversation->messages)),
+        return column(
+            text('Dashboard'),
+            text('Messages: ' . count($this->store->conversation->messages)),
         );
     }
 }
@@ -187,18 +195,19 @@ use Phalanx\Theatron\Contract\Screen;
 use Phalanx\Theatron\Context\ScreenContext;
 use Phalanx\Theatron\Input\Key;
 use Phalanx\Theatron\Tdom\Renderable;
-use Phalanx\Theatron\Tdom\Ui;
 
-final class SettingsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBindings
+use function Phalanx\Theatron\Ui\text;
+
+class SettingsScreen implements Screen, HasStatusBar, HasFocusables, Focusable, DeclaresBindings
 {
     public function __invoke(ScreenContext $ctx): Renderable
     {
-        return $ctx->ui->text('Settings');
+        return text('Settings');
     }
 
-    public function statusBar(Ui $ui): Renderable
+    public function statusBar(): Renderable
     {
-        return $ui->text('  Space toggle  |  Esc back');
+        return text('  Space toggle  |  Esc back');
     }
 
     /** @return list<array{string, Focusable}> */
@@ -271,21 +280,21 @@ $store->mutate(
 
 ## Rendering with TDOM
 
-Build terminal UI with the `Ui` factory on the render context.
+Build terminal UI with free functions from `Phalanx\Theatron\Ui`.
 
-| Factory Method | Element | Purpose |
+| Function | Element | Purpose |
 |---|---|---|
-| `$ui->text($content, $style)` | `TextElement` | Single line of text, plain string or styled `Line` |
-| `$ui->panel($title, $child, $style)` | `PanelElement` | Bordered box with title and child content |
-| `$ui->column(...$children)` | `ColumnElement` | Vertical stack |
-| `$ui->row(...$children)` | `RowElement` | Horizontal layout |
-| `$ui->grid($columns, ...$children)` | `GridElement` | Column-defined grid |
-| `$ui->scrollable($content, $maxLines, $style)` | `ScrollElement` | Scrollable text region |
-| `$ui->input($value, $prompt, $cursor, $style)` | `InputElement` | Text input field |
-| `$ui->spinner($label, $frame, $style)` | `SpinnerElement` | Animated spinner |
-| `$ui->statusLine(...$sections)` | `StatusLineElement` | Status bar sections |
-| `$ui->divider($style)` | `DividerElement` | Horizontal rule |
-| `$ui->progress($value, $label, $style)` | `ProgressElement` | Progress bar from `0.0` to `1.0` |
+| `text($content, $style)` | `TextElement` | Single line of text, plain string or styled `Line` |
+| `panel($title, $child, $style)` | `PanelElement` | Bordered box with title and child content |
+| `column(...$children)` | `ColumnElement` | Vertical stack |
+| `row(...$children)` | `RowElement` | Horizontal layout |
+| `grid($columns, ...$children)` | `GridElement` | Column-defined grid |
+| `scrollable($content, $maxLines, $style)` | `ScrollElement` | Scrollable text region |
+| `input($value, $prompt, $cursor, $style)` | `InputElement` | Text input field |
+| `spinner($label, $frame, $style)` | `SpinnerElement` | Animated spinner |
+| `statusLine(...$sections)` | `StatusLineElement` | Status bar sections |
+| `divider($style)` | `DividerElement` | Horizontal rule |
+| `progress($value, $label, $style)` | `ProgressElement` | Progress bar from `0.0` to `1.0` |
 
 Example:
 
@@ -298,21 +307,27 @@ use Phalanx\Theatron\Tdom\Style;
 use Phalanx\Theatron\Text\Line;
 use Phalanx\Theatron\Text\Span;
 
+use function Phalanx\Theatron\Ui\column;
+use function Phalanx\Theatron\Ui\divider;
+use function Phalanx\Theatron\Ui\panel;
+use function Phalanx\Theatron\Ui\progress;
+use function Phalanx\Theatron\Ui\text;
+
 public function __invoke(RenderContext $ctx): Renderable
 {
-    $header = $ctx->ui->text(Line::from(
+    $header = text(Line::from(
         Span::styled('Theatron', TextStyle::new()->fg(Color::indexed(250))->bold()),
         Span::plain(' ready'),
     ));
 
-    $body = $ctx->ui->column(
+    $body = column(
         $header,
-        $ctx->ui->progress(0.73, 'pipeline'),
-        $ctx->ui->divider(),
-        $ctx->ui->text('All tasks nominal.'),
+        progress(0.73, 'pipeline'),
+        divider(),
+        text('All tasks nominal.'),
     );
 
-    return $ctx->ui->panel(
+    return panel(
         'Dashboard',
         $body,
         Style::of(size: Size::fill(), border: Border::Single),

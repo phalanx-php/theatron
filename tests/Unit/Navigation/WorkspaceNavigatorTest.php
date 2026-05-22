@@ -16,7 +16,6 @@ use Phalanx\Theatron\Navigation\WorkspaceNavigator;
 use Phalanx\Theatron\Reactive\Signal;
 use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Renderable;
-use Phalanx\Theatron\Tdom\Ui;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -28,7 +27,7 @@ final class ZeusScreen implements Screen
 {
     public function __invoke(ScreenContext $ctx): Renderable
     {
-        return $ctx->ui->text('Zeus');
+        return \Phalanx\Theatron\Ui\text('Zeus');
     }
 }
 
@@ -36,7 +35,7 @@ final class ApolloScreen implements Screen
 {
     public function __invoke(ScreenContext $ctx): Renderable
     {
-        return $ctx->ui->text('Apollo');
+        return \Phalanx\Theatron\Ui\text('Apollo');
     }
 }
 
@@ -44,7 +43,7 @@ final class LeonidasScreen implements Screen
 {
     public function __invoke(ScreenContext $ctx): Renderable
     {
-        return $ctx->ui->text('Leonidas');
+        return \Phalanx\Theatron\Ui\text('Leonidas');
     }
 }
 
@@ -57,7 +56,7 @@ final class SpartaOverlay implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text($this->label);
+        return \Phalanx\Theatron\Ui\text($this->label);
     }
 }
 
@@ -70,7 +69,7 @@ final class OlympusOverlay implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text($this->title->get());
+        return \Phalanx\Theatron\Ui\text($this->title->get());
     }
 }
 
@@ -293,7 +292,7 @@ final class WorkspaceNavigatorTest extends TestCase
         // Render once so the signal subscription is active.
         $scope = $this->createStub(\Phalanx\Scope\Scope::class);
         $system = $this->makeSystem();
-        $overlay->render(new RenderContext($scope, new Ui(), Theme::default(), $system));
+        $overlay->render(new RenderContext($scope, Theme::default(), $system));
 
         $nav->dismiss();
 
@@ -310,7 +309,7 @@ final class WorkspaceNavigatorTest extends TestCase
         $overlay = $nav->overlays()[0];
         $scope = $this->createStub(\Phalanx\Scope\Scope::class);
         $system = $this->makeSystem();
-        $ctx = new RenderContext($scope, new Ui(), Theme::default(), $system);
+        $ctx = new RenderContext($scope, Theme::default(), $system);
 
         $result = $overlay->render($ctx);
 

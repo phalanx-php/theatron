@@ -19,11 +19,13 @@ use Phalanx\Theatron\Style\Color;
 use Phalanx\Theatron\Style\Style as TextStyle;
 use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Tdom\Style as TdomStyle;
-use Phalanx\Theatron\Tdom\Ui;
 use Phalanx\Theatron\Template\AppStore;
 use Phalanx\Theatron\Template\Slice\SettingsTab;
 use Phalanx\Theatron\Text\Line;
 use Phalanx\Theatron\Text\Span;
+
+use function Phalanx\Theatron\Ui\column;
+use function Phalanx\Theatron\Ui\text;
 
 class SettingsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBindings, NormalModeHandler
 {
@@ -37,16 +39,15 @@ class SettingsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBin
         $settings = $this->store->settings;
         $modelName = $this->store->activity->modelName;
         $rows = [
-            self::row($ctx->ui, Line::from(Span::styled('  Settings', self::headerStyle()))),
-            self::divider($ctx->ui, 100),
-            self::row($ctx->ui, $this->tabs()),
-            self::divider($ctx->ui, 100),
-            self::blank($ctx->ui),
+            self::row(Line::from(Span::styled('  Settings', self::headerStyle()))),
+            self::divider(100),
+            self::row($this->tabs()),
+            self::divider(100),
+            self::blank(),
         ];
 
         foreach ($settings->activeTab->items($modelName) as $i => $item) {
             $rows[] = self::row(
-                $ctx->ui,
                 $this->item(
                     $item[0],
                     $item[1],
@@ -56,15 +57,15 @@ class SettingsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBin
             );
         }
 
-        $rows[] = self::blank($ctx->ui);
-        $rows[] = self::divider($ctx->ui, 100);
+        $rows[] = self::blank();
+        $rows[] = self::divider(100);
 
-        return $ctx->ui->column(...$rows);
+        return column(...$rows);
     }
 
-    public function statusBar(Ui $ui): Renderable
+    public function statusBar(): Renderable
     {
-        return $ui->text(
+        return text(
             Line::from(
                 Span::styled('  ←', TextStyle::new()->fg(Color::indexed(245))),
                 Span::styled(' tab', TextStyle::new()->fg(Color::indexed(250))),
@@ -145,19 +146,19 @@ class SettingsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBin
         return false;
     }
 
-    private static function row(Ui $ui, Line $line): Renderable
+    private static function row(Line $line): Renderable
     {
-        return $ui->text($line, TdomStyle::of(size: Size::fixed(1)));
+        return text($line, TdomStyle::of(size: Size::fixed(1)));
     }
 
-    private static function blank(Ui $ui): Renderable
+    private static function blank(): Renderable
     {
-        return self::row($ui, Line::plain(''));
+        return self::row(Line::plain(''));
     }
 
-    private static function divider(Ui $ui, int $width): Renderable
+    private static function divider(int $width): Renderable
     {
-        return self::row($ui, Line::from(
+        return self::row(Line::from(
             Span::styled(str_repeat('─', $width), TextStyle::new()->fg(Color::indexed(236))),
         ));
     }

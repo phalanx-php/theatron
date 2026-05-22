@@ -21,11 +21,14 @@ use Phalanx\Theatron\Style\Color;
 use Phalanx\Theatron\Style\Style as TextStyle;
 use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Tdom\Style as TdomStyle;
-use Phalanx\Theatron\Tdom\Ui;
 use Phalanx\Theatron\Template\AppStore;
 use Phalanx\Theatron\Template\Slice\LlmRequestEntry;
 use Phalanx\Theatron\Text\Line;
 use Phalanx\Theatron\Text\Span;
+
+use function Phalanx\Theatron\Ui\column;
+use function Phalanx\Theatron\Ui\row;
+use function Phalanx\Theatron\Ui\text;
 
 class DevToolsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBindings, NormalModeHandler
 {
@@ -38,15 +41,15 @@ class DevToolsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBin
 
     public function __invoke(ScreenContext $ctx): Renderable
     {
-        return $ctx->ui->row(
-            $ctx->ui->column(...$this->leftRows($ctx->ui)),
-            $ctx->ui->column(...$this->requestRows($ctx->ui)),
+        return row(
+            column(...$this->leftRows()),
+            column(...$this->requestRows()),
         );
     }
 
-    public function statusBar(Ui $ui): Renderable
+    public function statusBar(): Renderable
     {
-        return $ui->text(
+        return text(
             Line::from(
                 Span::styled('  ↑', TextStyle::new()->fg(Color::indexed(245))),
                 Span::styled(' req', TextStyle::new()->fg(Color::indexed(250))),
@@ -108,7 +111,7 @@ class DevToolsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBin
         return false;
     }
 
-    private static function requestRow(Ui $ui, LlmRequestEntry $entry, bool $focused): Renderable
+    private static function requestRow(LlmRequestEntry $entry, bool $focused): Renderable
     {
         $status = match (true) {
             $entry->error !== null => 'ERR',
@@ -118,7 +121,7 @@ class DevToolsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBin
         $time = $entry->elapsedMs !== null ? number_format($entry->elapsedMs / 1000, 1) . 's' : '...';
         $tokens = $entry->tokenCount !== null ? $entry->tokenCount . ' tok' : '';
 
-        return self::row($ui, Line::from(
+        return self::row(Line::from(
             Span::styled(
                 $focused ? ' ▶ ' : '   ',
                 TextStyle::new()->fg($focused ? Color::indexed(252) : Color::indexed(242)),
@@ -128,22 +131,22 @@ class DevToolsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBin
         ));
     }
 
-    private static function kv(Ui $ui, string $key, string $value): Renderable
+    private static function kv(string $key, string $value): Renderable
     {
-        return self::row($ui, Line::from(
+        return self::row(Line::from(
             Span::styled("    {$key}: ", TextStyle::new()->fg(Color::indexed(245))),
             Span::styled($value, TextStyle::new()->fg(Color::indexed(250))),
         ));
     }
 
-    private static function row(Ui $ui, Line $line): Renderable
+    private static function row(Line $line): Renderable
     {
-        return $ui->text($line, TdomStyle::of(size: Size::fixed(1)));
+        return text($line, TdomStyle::of(size: Size::fixed(1)));
     }
 
-    private static function blank(Ui $ui): Renderable
+    private static function blank(): Renderable
     {
-        return self::row($ui, Line::plain(''));
+        return self::row(Line::plain(''));
     }
 
     private static function pipe(): Span
@@ -175,36 +178,35 @@ class DevToolsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBin
     }
 
     /** @return list<Renderable> */
-    private function leftRows(Ui $ui): array
+    private function leftRows(): array
     {
         $conversation = $this->store->conversation;
         $activity = $this->store->activity;
         $input = $this->store->input;
         $rows = [
-            self::row($ui, Line::from(
+            self::row(Line::from(
                 Span::styled('  ── DevTools ─────────────────────────────', self::headerStyle()),
             )),
-            self::blank($ui),
-            self::row($ui, Line::from(Span::styled('  Store Slices', self::headerStyle()))),
+            self::blank(),
+            self::row(Line::from(Span::styled('  Store Slices', self::headerStyle()))),
             self::kv(
-                $ui,
                 'repl.convo',
                 count($conversation->exchangeIndexes()) . ' exchanges, scroll=' . $conversation->scrollOffset
                     . ', expanded=' . ($conversation->expandedIndex ?? 'none'),
             ),
-            self::kv($ui, 'repl.status', 'Agent [' . strtolower($activity->status->name) . ']'),
-            self::kv($ui, 'repl.input', mb_strlen($input->text) . ' chars'),
-            self::kv($ui, 'repl.requests', count($this->store->requests->entries) . ' entries'),
-            self::blank($ui),
+            self::kv('repl.status', 'Agent [' . strtolower($activity->status->name) . ']'),
+            self::kv('repl.input', mb_strlen($input->text) . ' chars'),
+            self::kv('repl.requests', count($this->store->requests->entries) . ' entries'),
+            self::blank(),
         ];
 
         if ($conversation->messages !== []) {
-            $rows[] = self::row($ui, Line::from(Span::styled('  Exchange History', self::headerStyle())));
+            $rows[] = self::row(Line::from(Span::styled('  Exchange History', self::headerStyle())));
             foreach ($conversation->exchangeIndexes() as $i => $messageIndex) {
                 $user = $conversation->messages[$messageIndex];
-                $rows[] = self::kv($ui, "  [{$i}]", 'user=' . mb_strlen($user->text) . 'c');
+                $rows[] = self::kv("  [{$i}]", 'user=' . mb_strlen($user->text) . 'c');
             }
-            $rows[] = self::blank($ui);
+            $rows[] = self::blank();
         }
 
         $memReal = memory_get_usage(true);
@@ -212,43 +214,43 @@ class DevToolsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBin
         $peakReal = memory_get_peak_usage(true);
         $peakZend = memory_get_peak_usage(false);
 
-        $rows[] = self::row($ui, Line::from(Span::styled('  Memory (ZMM)', self::headerStyle())));
-        $rows[] = self::kv($ui, 'heap used', self::bytes($memZend) . ' / ' . self::bytes($memReal));
-        $rows[] = self::kv($ui, 'heap peak', self::bytes($peakZend) . ' / ' . self::bytes($peakReal));
-        $rows[] = self::blank($ui);
+        $rows[] = self::row(Line::from(Span::styled('  Memory (ZMM)', self::headerStyle())));
+        $rows[] = self::kv('heap used', self::bytes($memZend) . ' / ' . self::bytes($memReal));
+        $rows[] = self::kv('heap peak', self::bytes($peakZend) . ' / ' . self::bytes($peakReal));
+        $rows[] = self::blank();
 
         $gc = gc_status();
-        $rows[] = self::row($ui, Line::from(Span::styled('  Garbage Collector', self::headerStyle())));
-        $rows[] = self::kv($ui, 'runs', (string) $gc['runs']);
-        $rows[] = self::kv($ui, 'collected', (string) $gc['collected']);
-        $rows[] = self::kv($ui, 'root buffer', $gc['roots'] . ' / ' . $gc['buffer_size'] . ' slots');
-        $rows[] = self::blank($ui);
+        $rows[] = self::row(Line::from(Span::styled('  Garbage Collector', self::headerStyle())));
+        $rows[] = self::kv('runs', (string) $gc['runs']);
+        $rows[] = self::kv('collected', (string) $gc['collected']);
+        $rows[] = self::kv('root buffer', $gc['roots'] . ' / ' . $gc['buffer_size'] . ' slots');
+        $rows[] = self::blank();
 
-        $rows[] = self::row($ui, Line::from(Span::styled('  Runtime', self::headerStyle())));
-        $rows[] = self::kv($ui, 'php', PHP_VERSION . ' (' . PHP_SAPI . ')');
-        $rows[] = self::kv($ui, 'os', PHP_OS . ' ' . php_uname('m'));
-        $rows[] = self::kv($ui, 'pid', (string) getmypid());
-        $rows[] = self::kv($ui, 'components', (string) count($this->mountSystem->mounted()));
+        $rows[] = self::row(Line::from(Span::styled('  Runtime', self::headerStyle())));
+        $rows[] = self::kv('php', PHP_VERSION . ' (' . PHP_SAPI . ')');
+        $rows[] = self::kv('os', PHP_OS . ' ' . php_uname('m'));
+        $rows[] = self::kv('pid', (string) getmypid());
+        $rows[] = self::kv('components', (string) count($this->mountSystem->mounted()));
 
         return $rows;
     }
 
     /** @return list<Renderable> */
-    private function requestRows(Ui $ui): array
+    private function requestRows(): array
     {
         $rows = [
-            self::row($ui, Line::from(Span::styled(' LLM Requests', self::headerStyle()))),
-            self::blank($ui),
+            self::row(Line::from(Span::styled(' LLM Requests', self::headerStyle()))),
+            self::blank(),
         ];
 
         if ($this->store->requests->entries === []) {
-            $rows[] = self::row($ui, Line::from(Span::styled('  (no requests yet)', self::dimStyle())));
+            $rows[] = self::row(Line::from(Span::styled('  (no requests yet)', self::dimStyle())));
 
             return $rows;
         }
 
         foreach ($this->store->requests->entries as $i => $entry) {
-            $rows[] = self::requestRow($ui, $entry, $i === $this->store->requests->focusedIndex);
+            $rows[] = self::requestRow($entry, $i === $this->store->requests->focusedIndex);
         }
 
         return $rows;

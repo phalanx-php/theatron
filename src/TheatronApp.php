@@ -13,6 +13,7 @@ use Phalanx\Theatron\Buffer\Buffer;
 use Phalanx\Theatron\Buffer\Rect;
 use Phalanx\Theatron\Component\MountSystem;
 use Phalanx\Theatron\Context\RenderContext;
+use Phalanx\Theatron\Context\RenderEnvironment;
 use Phalanx\Theatron\Context\ScreenContext;
 use Phalanx\Theatron\Contract\DeclaresBindings;
 use Phalanx\Theatron\Contract\HasFocusables;
@@ -36,7 +37,6 @@ use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Painter\PaintContext;
 use Phalanx\Theatron\Tdom\Painter\Painter;
 use Phalanx\Theatron\Tdom\Renderable;
-use Phalanx\Theatron\Tdom\Ui;
 
 final class TheatronApp
 {
@@ -86,10 +86,9 @@ final class TheatronApp
         $registry->activateScreen($this->screens[0]);
         self::rebuildBindings($registry, $navigator);
 
-        $ui = new Ui($this->theme);
         $renderDiagnostics = RenderDiagnostics::enabled();
-        $screenCtx = new ScreenContext($scope, $ui, $this->theme, $navigator, $mountSystem, $renderDiagnostics);
-        $renderCtx = new RenderContext($scope, $ui, $this->theme, $mountSystem, $registry, $renderDiagnostics);
+        $screenCtx = new ScreenContext($scope, $this->theme, $navigator, $mountSystem, $renderDiagnostics);
+        $renderCtx = new RenderContext($scope, $this->theme, $mountSystem, $registry, $renderDiagnostics);
         $statusMountOwner = new \stdClass();
 
         $layout = ScreenLayout::mainWithStatusBar();
@@ -134,7 +133,10 @@ final class TheatronApp
             $statusRegion = $layout->region('status');
             $screen = $workspace->screen;
             if ($screen instanceof HasStatusBar) {
-                $statusRenderable = $screen->statusBar($screenCtx->ui);
+                $statusRenderable = RenderEnvironment::withTheme(
+                    $screenCtx->theme,
+                    static fn(): Renderable => $screen->statusBar(),
+                );
                 self::paintRegion($statusRenderable, $statusRegion, $renderCtx, $statusMountOwner);
             } else {
                 $mountSystem->disposeOwnedSlots($statusMountOwner);

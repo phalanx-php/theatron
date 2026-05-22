@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Phalanx\Theatron\Tests\Unit\Tdom;
 
+use Phalanx\Theatron\Context\RenderEnvironment;
 use Phalanx\Theatron\Layout\Border;
 use Phalanx\Theatron\Layout\Size;
 use Phalanx\Theatron\Style\Color;
@@ -22,11 +23,12 @@ use Phalanx\Theatron\Tdom\Element\StatusLineElement;
 use Phalanx\Theatron\Tdom\Element\TextElement;
 use Phalanx\Theatron\Tdom\ElementType;
 use Phalanx\Theatron\Tdom\Style;
-use Phalanx\Theatron\Tdom\Ui;
 use Phalanx\Theatron\Text\Line;
 use Phalanx\Theatron\Text\Span;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+
+use function Phalanx\Theatron\Ui\text;
 
 final class ElementTest extends TestCase
 {
@@ -157,9 +159,10 @@ final class ElementTest extends TestCase
     #[Test]
     public function textAutoParsesBBCodeWhenThemePresent(): void
     {
-        $ui = new Ui(Theme::default());
-
-        $el = $ui->text('[bold]Sparta[/]');
+        $el = RenderEnvironment::withTheme(
+            Theme::default(),
+            static fn() => text('[bold]Sparta[/]'),
+        );
 
         self::assertInstanceOf(Line::class, $el->content);
         self::assertCount(1, $el->content->spans);
@@ -169,9 +172,7 @@ final class ElementTest extends TestCase
     #[Test]
     public function textPassesThroughStringWhenNoTheme(): void
     {
-        $ui = new Ui();
-
-        $el = $ui->text('[bold]Sparta[/]');
+        $el = text('[bold]Sparta[/]');
 
         self::assertSame('[bold]Sparta[/]', $el->content);
     }
@@ -179,9 +180,10 @@ final class ElementTest extends TestCase
     #[Test]
     public function plainTextWithoutMarkupRemainsString(): void
     {
-        $ui = new Ui(Theme::default());
-
-        $el = $ui->text('plain text');
+        $el = RenderEnvironment::withTheme(
+            Theme::default(),
+            static fn() => text('plain text'),
+        );
 
         self::assertSame('plain text', $el->content);
     }

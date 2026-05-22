@@ -23,7 +23,6 @@ use Phalanx\Theatron\Tdom\Element\StatusLineElement;
 use Phalanx\Theatron\Tdom\Element\TextElement;
 use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Tdom\Style;
-use Phalanx\Theatron\Tdom\Ui;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -38,7 +37,7 @@ final class MountSystemTest extends TestCase
     {
         $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
 
-        $mounted = $system->mount(SimpleTestComponent::class);
+        $mounted = $system->mountComponent(SimpleTestComponent::class);
 
         self::assertInstanceOf(MountedComponent::class, $mounted);
     }
@@ -48,11 +47,10 @@ final class MountSystemTest extends TestCase
     {
         $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
 
-        $mounted = $system->mount(ParamTestComponent::class, label: 'Apollo');
+        $mounted = $system->mountComponent(ParamTestComponent::class, label: 'Apollo');
 
         $ctx = new RenderContext(
             $this->createStub(\Phalanx\Scope\Scope::class),
-            new Ui(),
             Theme::default(),
             $system,
         );
@@ -67,7 +65,7 @@ final class MountSystemTest extends TestCase
     {
         $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
 
-        $mounted = $system->mount(SignalTestComponent::class);
+        $mounted = $system->mountComponent(SignalTestComponent::class);
 
         self::assertTrue($mounted->isDirty);
     }
@@ -78,11 +76,10 @@ final class MountSystemTest extends TestCase
         $shared = new Signal('from-parent');
         $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
 
-        $mounted = $system->mount(BorrowingComponent::class, input: $shared);
+        $mounted = $system->mountComponent(BorrowingComponent::class, input: $shared);
 
         $ctx = new RenderContext(
             $this->createStub(\Phalanx\Scope\Scope::class),
-            new Ui(),
             Theme::default(),
             $system,
         );
@@ -98,8 +95,8 @@ final class MountSystemTest extends TestCase
     {
         $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
 
-        $a = $system->mount(SimpleTestComponent::class);
-        $b = $system->mount(SimpleTestComponent::class);
+        $a = $system->mountComponent(SimpleTestComponent::class);
+        $b = $system->mountComponent(SimpleTestComponent::class);
 
         self::assertFalse($a->isDisposed);
         self::assertFalse($b->isDisposed);
@@ -115,7 +112,7 @@ final class MountSystemTest extends TestCase
     {
         $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
 
-        $mounted = $system->mount(SimpleTestComponent::class);
+        $mounted = $system->mountComponent(SimpleTestComponent::class);
 
         $system->disposeAll();
         $system->disposeAll();
@@ -133,7 +130,7 @@ final class MountSystemTest extends TestCase
         $taskScope = $this->createStub(TaskScope::class);
         $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class), $taskScope);
 
-        $system->mount(MountableTestComponent::class, tracker: $tracker);
+        $system->mountComponent(MountableTestComponent::class, tracker: $tracker);
 
         self::assertTrue($tracker->mounted);
         self::assertSame($taskScope, $tracker->scope);
@@ -149,7 +146,7 @@ final class MountSystemTest extends TestCase
         $taskScope = $this->createStub(TaskScope::class);
         $system = new MountSystem($taskScope, registry: new SignalRegistry());
 
-        $system->mount(MountableTestComponent::class, tracker: $tracker);
+        $system->mountComponent(MountableTestComponent::class, tracker: $tracker);
 
         self::assertTrue($tracker->mounted);
         self::assertSame($taskScope, $tracker->scope);
@@ -165,7 +162,7 @@ final class MountSystemTest extends TestCase
 
         $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
 
-        $system->mount(MountableTestComponent::class, tracker: $tracker);
+        $system->mountComponent(MountableTestComponent::class, tracker: $tracker);
 
         self::assertFalse($tracker->mounted, 'onMount must not be called without TaskScope');
 
@@ -181,9 +178,9 @@ final class MountSystemTest extends TestCase
         $taskScope->expects(self::once())->method('onDispose');
         $system = new MountSystem($taskScope);
 
-        $system->mount(SimpleTestComponent::class);
-        $system->mount(SimpleTestComponent::class);
-        $system->mount(SimpleTestComponent::class);
+        $system->mountComponent(SimpleTestComponent::class);
+        $system->mountComponent(SimpleTestComponent::class);
+        $system->mountComponent(SimpleTestComponent::class);
 
         self::assertCount(3, $system->mounted());
     }
@@ -199,7 +196,7 @@ final class MountSystemTest extends TestCase
         $taskScope = $this->createStub(TaskScope::class);
         $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class), $taskScope);
 
-        $mounted = $system->mount(MountableTestComponent::class, tracker: $tracker);
+        $mounted = $system->mountComponent(MountableTestComponent::class, tracker: $tracker);
 
         self::assertTrue($tracker->mounted);
         self::assertFalse($tracker->unmounted);
@@ -214,11 +211,11 @@ final class MountSystemTest extends TestCase
     {
         $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
 
-        $a = $system->mount(SimpleTestComponent::class);
+        $a = $system->mountComponent(SimpleTestComponent::class);
         $system->disposeAll();
         self::assertTrue($a->isDisposed);
 
-        $b = $system->mount(SimpleTestComponent::class);
+        $b = $system->mountComponent(SimpleTestComponent::class);
         self::assertFalse($b->isDisposed);
     }
 
@@ -230,7 +227,7 @@ final class MountSystemTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('Component props must be passed as named arguments.');
 
-        $system->mount(ParamTestComponent::class, 'Apollo');
+        $system->mountComponent(ParamTestComponent::class, 'Apollo');
     }
 
     #[Test]
@@ -240,8 +237,8 @@ final class MountSystemTest extends TestCase
 
         self::assertCount(0, $system->mounted());
 
-        $system->mount(SimpleTestComponent::class);
-        $system->mount(SimpleTestComponent::class);
+        $system->mountComponent(SimpleTestComponent::class);
+        $system->mountComponent(SimpleTestComponent::class);
 
         self::assertCount(2, $system->mounted());
     }
@@ -251,10 +248,10 @@ final class MountSystemTest extends TestCase
     {
         $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
 
-        $system->mount(SimpleTestComponent::class);
+        $system->mountComponent(SimpleTestComponent::class);
 
         $copy = $system->mounted();
-        $copy[] = $system->mount(SimpleTestComponent::class);
+        $copy[] = $system->mountComponent(SimpleTestComponent::class);
 
         self::assertCount(2, $system->mounted(), 'Mutating returned array must not affect internal list');
     }
@@ -264,8 +261,8 @@ final class MountSystemTest extends TestCase
     {
         $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
 
-        $system->mount(SimpleTestComponent::class);
-        $system->mount(SimpleTestComponent::class);
+        $system->mountComponent(SimpleTestComponent::class);
+        $system->mountComponent(SimpleTestComponent::class);
 
         self::assertCount(2, $system->mounted());
 
@@ -283,7 +280,7 @@ final class MountSystemTest extends TestCase
             registry: $registry,
         );
 
-        $system->mount(SignalHoldingComponent::class);
+        $system->mountComponent(SignalHoldingComponent::class);
 
         $snapshot = $registry->snapshot();
         self::assertCount(1, $snapshot);
@@ -295,7 +292,7 @@ final class MountSystemTest extends TestCase
     {
         $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
 
-        $mounted = $system->mount(SignalHoldingComponent::class);
+        $mounted = $system->mountComponent(SignalHoldingComponent::class);
 
         self::assertSame(1, $mounted->signalCount);
     }
@@ -310,7 +307,7 @@ final class MountSystemTest extends TestCase
             registry: $registry,
         );
 
-        $system->mount(BorrowedOnlyComponent::class, input: $shared);
+        $system->mountComponent(BorrowedOnlyComponent::class, input: $shared);
 
         self::assertSame(0, $registry->count());
     }
@@ -322,11 +319,10 @@ final class MountSystemTest extends TestCase
         $service = new ProvidedService('olympus');
         $system->provide(ProvidedService::class, $service);
 
-        $mounted = $system->mount(ServiceConsumerComponent::class);
+        $mounted = $system->mountComponent(ServiceConsumerComponent::class);
 
         $ctx = new RenderContext(
             $this->createStub(\Phalanx\Scope\Scope::class),
-            new Ui(),
             Theme::default(),
             $system,
         );
@@ -556,6 +552,8 @@ final class MountSystemTest extends TestCase
         $system = new MountSystem($this->createStub(\Phalanx\Scope\Scope::class));
         $model = new \stdClass();
         $model->childSignal = new Signal('child');
+        $model->nestedChildRenderCount = 0;
+        $model->mountedCountBeforeThrow = 0;
         $parent = $this->mountParent(new FailingAfterNestedChildRenderParentComponent($model), $system);
         $ctx = $this->renderContext($system);
 
@@ -566,6 +564,8 @@ final class MountSystemTest extends TestCase
             self::assertSame('parent failed after nested render', $e->getMessage());
         }
 
+        self::assertSame(1, $model->nestedChildRenderCount);
+        self::assertSame(2, $model->mountedCountBeforeThrow);
         self::assertCount(0, $system->mounted());
     }
 
@@ -651,7 +651,7 @@ final class MountSystemTest extends TestCase
         $system = new MountSystem($scope);
         $system->provide(ProvidedService::class, $providedService);
 
-        $mounted = $system->mount(ServiceConsumerComponent::class, service: $namedService);
+        $mounted = $system->mountComponent(ServiceConsumerComponent::class, service: $namedService);
         $result = $mounted->render($this->renderContext($system));
 
         self::assertInstanceOf(TextElement::class, $result);
@@ -668,7 +668,7 @@ final class MountSystemTest extends TestCase
         $system = new MountSystem($scope);
         $system->provide(ProvidedService::class, $providedService);
 
-        $mounted = $system->mount(ServiceConsumerComponent::class);
+        $mounted = $system->mountComponent(ServiceConsumerComponent::class);
         $result = $mounted->render($this->renderContext($system));
 
         self::assertInstanceOf(TextElement::class, $result);
@@ -683,7 +683,7 @@ final class MountSystemTest extends TestCase
         $scope->method('service')->willReturn($scopeService);
         $system = new MountSystem($scope);
 
-        $mounted = $system->mount(ServiceConsumerComponent::class);
+        $mounted = $system->mountComponent(ServiceConsumerComponent::class);
         $result = $mounted->render($this->renderContext($system));
 
         self::assertInstanceOf(TextElement::class, $result);
@@ -849,7 +849,6 @@ final class MountSystemTest extends TestCase
     {
         return new RenderContext(
             $this->createStub(\Phalanx\Scope\Scope::class),
-            new Ui(),
             Theme::default(),
             $system,
         );
@@ -859,7 +858,6 @@ final class MountSystemTest extends TestCase
     {
         return new ScreenContext(
             $scope,
-            new Ui(),
             Theme::default(),
             $this->createStub(Navigator::class),
             $system,
@@ -879,7 +877,7 @@ final class SimpleTestComponent implements Component
 {
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text('simple');
+        return \Phalanx\Theatron\Ui\text('simple');
     }
 }
 
@@ -892,7 +890,7 @@ final class ParamTestComponent implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text($this->label);
+        return \Phalanx\Theatron\Ui\text($this->label);
     }
 }
 
@@ -905,7 +903,7 @@ final class SignalTestComponent implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text((string) $this->count->get());
+        return \Phalanx\Theatron\Ui\text((string) $this->count->get());
     }
 }
 
@@ -919,7 +917,7 @@ final class BorrowingComponent implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text((string) $this->input->get());
+        return \Phalanx\Theatron\Ui\text((string) $this->input->get());
     }
 }
 
@@ -932,7 +930,7 @@ final class MountableTestComponent implements Component, Mountable
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text('mountable');
+        return \Phalanx\Theatron\Ui\text('mountable');
     }
 
     public function onMount(TaskScope $scope): void
@@ -969,7 +967,7 @@ final class ServiceConsumerComponent implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text($this->service->name());
+        return \Phalanx\Theatron\Ui\text($this->service->name());
     }
 }
 
@@ -982,7 +980,7 @@ final class SignalHoldingComponent implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text((string) $this->counter->get());
+        return \Phalanx\Theatron\Ui\text((string) $this->counter->get());
     }
 }
 
@@ -995,7 +993,7 @@ final class BorrowedOnlyComponent implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text((string) $this->input->get());
+        return \Phalanx\Theatron\Ui\text((string) $this->input->get());
     }
 }
 
@@ -1010,8 +1008,8 @@ final class SlotParentComponent implements Component
     {
         $this->model->parentSignal->get();
 
-        return $ctx->ui->column(
-            $ctx->mount(SlotChildComponent::class, input: $this->model->childSignal),
+        return \Phalanx\Theatron\Ui\column(
+            \Phalanx\Theatron\Ui\mount(SlotChildComponent::class, input: $this->model->childSignal),
         );
     }
 }
@@ -1025,7 +1023,7 @@ final class SlotChildComponent implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text((string) $this->input->get());
+        return \Phalanx\Theatron\Ui\text((string) $this->input->get());
     }
 }
 
@@ -1038,8 +1036,8 @@ final class LabelSlotParentComponent implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->column(
-            $ctx->mount(LabelSlotChildComponent::class, label: (string) $this->model->label->get()),
+        return \Phalanx\Theatron\Ui\column(
+            \Phalanx\Theatron\Ui\mount(LabelSlotChildComponent::class, label: (string) $this->model->label->get()),
         );
     }
 }
@@ -1053,7 +1051,7 @@ final class LabelSlotChildComponent implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text($this->label);
+        return \Phalanx\Theatron\Ui\text($this->label);
     }
 }
 
@@ -1070,8 +1068,8 @@ final class ActivationSlotParentComponent implements Component
             ? FailingActivationSlotChildComponent::class
             : TrackedActivationSlotChildComponent::class;
 
-        return $ctx->ui->column(
-            $ctx->mount(
+        return \Phalanx\Theatron\Ui\column(
+            \Phalanx\Theatron\Ui\mount(
                 $component,
                 label: (string) $this->model->label->get(),
                 tracker: $this->model->tracker,
@@ -1090,7 +1088,7 @@ final class TrackedActivationSlotChildComponent implements Component, Mountable
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text($this->label);
+        return \Phalanx\Theatron\Ui\text($this->label);
     }
 
     public function onMount(TaskScope $scope): void
@@ -1114,7 +1112,7 @@ final class FailingActivationSlotChildComponent implements Component, Mountable
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text($this->label);
+        return \Phalanx\Theatron\Ui\text($this->label);
     }
 
     public function onMount(TaskScope $scope): void
@@ -1138,11 +1136,11 @@ final class ConditionalSlotParentComponent implements Component
     public function __invoke(RenderContext $ctx): Renderable
     {
         if (!$this->model->show->get()) {
-            return $ctx->ui->column();
+            return \Phalanx\Theatron\Ui\column();
         }
 
-        return $ctx->ui->column(
-            $ctx->mount(SlotChildComponent::class, input: $this->model->childSignal),
+        return \Phalanx\Theatron\Ui\column(
+            \Phalanx\Theatron\Ui\mount(SlotChildComponent::class, input: $this->model->childSignal),
         );
     }
 }
@@ -1160,8 +1158,8 @@ final class FailingBeforeSlotParentComponent implements Component
             throw new \RuntimeException('parent failed');
         }
 
-        return $ctx->ui->column(
-            $ctx->mount(SlotChildComponent::class, input: $this->model->childSignal),
+        return \Phalanx\Theatron\Ui\column(
+            \Phalanx\Theatron\Ui\mount(SlotChildComponent::class, input: $this->model->childSignal),
         );
     }
 }
@@ -1175,13 +1173,13 @@ final class FailingAfterReplacementSlotParentComponent implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        $child = $ctx->mount(LabelSlotChildComponent::class, label: (string) $this->model->label->get());
+        $child = \Phalanx\Theatron\Ui\mount(LabelSlotChildComponent::class, label: (string) $this->model->label->get());
 
         if ($this->model->throw) {
             throw new \RuntimeException('parent failed after replacement');
         }
 
-        return $ctx->ui->column($child);
+        return \Phalanx\Theatron\Ui\column($child);
     }
 }
 
@@ -1194,8 +1192,15 @@ final class FailingAfterNestedChildRenderParentComponent implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        $child = $ctx->mount(NestedChildSlotComponent::class, label: 'nested', model: $this->model);
-        $child->render($ctx);
+        $child = \Phalanx\Theatron\Ui\mount(NestedChildSlotComponent::class, label: 'nested', model: $this->model);
+        $mounted = $ctx->mountSystem->resolve($child);
+
+        if (!$mounted instanceof MountedComponent) {
+            throw new \LogicException('Nested child mount did not resolve to a mounted component.');
+        }
+
+        $mounted->render($ctx);
+        $this->model->mountedCountBeforeThrow = count($ctx->mountSystem->mounted());
 
         throw new \RuntimeException('parent failed after nested render');
     }
@@ -1205,8 +1210,8 @@ final class AmbientServiceSlotParentComponent implements Component
 {
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->column(
-            $ctx->mount(ServiceConsumerComponent::class),
+        return \Phalanx\Theatron\Ui\column(
+            \Phalanx\Theatron\Ui\mount(ServiceConsumerComponent::class),
         );
     }
 }
@@ -1220,8 +1225,8 @@ final class SlotOwnerScreen implements Screen
 
     public function __invoke(ScreenContext $ctx): Renderable
     {
-        return $ctx->ui->column(
-            $ctx->mount(SlotChildComponent::class, input: $this->model->childSignal),
+        return \Phalanx\Theatron\Ui\column(
+            \Phalanx\Theatron\Ui\mount(SlotChildComponent::class, input: $this->model->childSignal),
         );
     }
 }
@@ -1235,8 +1240,8 @@ final class NestedParentSlotComponent implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->column(
-            $ctx->mount(
+        return \Phalanx\Theatron\Ui\column(
+            \Phalanx\Theatron\Ui\mount(
                 NestedChildSlotComponent::class,
                 label: (string) $this->model->label->get(),
                 model: $this->model,
@@ -1255,9 +1260,11 @@ final class NestedChildSlotComponent implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->column(
-            $ctx->ui->text($this->label),
-            $ctx->mount(SlotChildComponent::class, input: $this->model->childSignal),
+        $this->model->nestedChildRenderCount = ($this->model->nestedChildRenderCount ?? 0) + 1;
+
+        return \Phalanx\Theatron\Ui\column(
+            \Phalanx\Theatron\Ui\text($this->label),
+            \Phalanx\Theatron\Ui\mount(SlotChildComponent::class, input: $this->model->childSignal),
         );
     }
 }

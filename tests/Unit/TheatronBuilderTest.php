@@ -28,7 +28,7 @@ final class OlympusScreen implements Screen
 {
     public function __invoke(ScreenContext $ctx): Renderable
     {
-        return $ctx->ui->text('Olympus');
+        return \Phalanx\Theatron\Ui\text('Olympus');
     }
 }
 
@@ -36,7 +36,7 @@ final class SpartaScreen implements Screen
 {
     public function __invoke(ScreenContext $ctx): Renderable
     {
-        return $ctx->ui->text('Sparta');
+        return \Phalanx\Theatron\Ui\text('Sparta');
     }
 }
 

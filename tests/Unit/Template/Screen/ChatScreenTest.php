@@ -17,7 +17,6 @@ use Phalanx\Theatron\Tdom\Element\PanelElement;
 use Phalanx\Theatron\Tdom\Element\RowElement;
 use Phalanx\Theatron\Tdom\Element\TextElement;
 use Phalanx\Theatron\Tdom\Renderable;
-use Phalanx\Theatron\Tdom\Ui;
 use Phalanx\Theatron\Template\AppStore;
 use Phalanx\Theatron\Template\Screen\ChatConversationHandler;
 use Phalanx\Theatron\Template\Screen\ChatInputHandler;
@@ -81,7 +80,7 @@ final class ChatScreenTest extends TestCase
     {
         $screen = new ChatScreen(new AppStore());
 
-        $text = self::flatten($screen->statusBar(new Ui()));
+        $text = self::flatten($screen->statusBar());
 
         self::assertStringContainsString('^P up', $text);
         self::assertStringContainsString('^N down', $text);
@@ -276,6 +275,6 @@ final class ChatScreenTest extends TestCase
         $navigator = $this->createStub(Navigator::class);
         $mountSystem = new MountSystem($scope);
 
-        return new ScreenContext($scope, new Ui(), Theme::default(), $navigator, $mountSystem);
+        return new ScreenContext($scope, Theme::default(), $navigator, $mountSystem);
     }
 }

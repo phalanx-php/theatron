@@ -17,7 +17,6 @@ use Phalanx\Theatron\Tdom\Element\PanelElement;
 use Phalanx\Theatron\Tdom\Element\RowElement;
 use Phalanx\Theatron\Tdom\Element\TextElement;
 use Phalanx\Theatron\Tdom\Renderable;
-use Phalanx\Theatron\Tdom\Ui;
 use Phalanx\Theatron\Template\AppStore;
 use Phalanx\Theatron\Template\Overlay\DevToolsOverlay;
 use Phalanx\Theatron\Template\Overlay\DevToolsTab;
@@ -213,7 +212,7 @@ final class DevToolsOverlayTest extends TestCase
     {
         $scope       = $this->createStub(TaskScope::class);
         $mountSystem = new MountSystem($scope);
-        $mountSystem->mount(OverlayTreeFixtureComponent::class);
+        $mountSystem->mountComponent(OverlayTreeFixtureComponent::class);
 
         [$overlay] = $this->makeOverlay(mountSystem: $mountSystem);
         $overlay->activeTab->set(DevToolsTab::Tree->value);
@@ -245,7 +244,7 @@ final class DevToolsOverlayTest extends TestCase
         $scope       = $this->createStub(TaskScope::class);
         $mountSystem ??= new MountSystem($scope);
 
-        return new RenderContext($scope, new Ui(), Theme::default(), $mountSystem);
+        return new RenderContext($scope, Theme::default(), $mountSystem);
     }
 
     private function assertColumn(Renderable $element): ColumnElement
@@ -298,6 +297,6 @@ final class OverlayTreeFixtureComponent implements Component
 {
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text('');
+        return \Phalanx\Theatron\Ui\text('');
     }
 }

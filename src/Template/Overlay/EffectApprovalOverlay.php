@@ -7,8 +7,12 @@ namespace Phalanx\Theatron\Template\Overlay;
 use Phalanx\Theatron\Context\RenderContext;
 use Phalanx\Theatron\Contract\Component;
 use Phalanx\Theatron\Tdom\Renderable;
-use Phalanx\Theatron\Tdom\Ui;
 use Phalanx\Theatron\Template\Slice\PendingEffect;
+
+use function Phalanx\Theatron\Ui\column;
+use function Phalanx\Theatron\Ui\divider;
+use function Phalanx\Theatron\Ui\panel;
+use function Phalanx\Theatron\Ui\text;
 
 class EffectApprovalOverlay implements Component
 {
@@ -19,40 +23,40 @@ class EffectApprovalOverlay implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->panel('Effect Approval', $ctx->ui->column(
-            self::renderEffectInfo($ctx->ui, $this->effect),
-            $ctx->ui->divider(),
-            self::renderArguments($ctx->ui, $this->effect),
-            $ctx->ui->divider(),
-            self::renderHazardLevel($ctx->ui, $this->effect),
-            $ctx->ui->divider(),
-            self::renderActions($ctx->ui),
+        return panel('Effect Approval', column(
+            self::renderEffectInfo($this->effect),
+            divider(),
+            self::renderArguments($this->effect),
+            divider(),
+            self::renderHazardLevel($this->effect),
+            divider(),
+            self::renderActions(),
         ));
     }
 
-    private static function renderEffectInfo(Ui $ui, PendingEffect $effect): Renderable
+    private static function renderEffectInfo(PendingEffect $effect): Renderable
     {
-        return $ui->column(
-            $ui->text(sprintf('Kind: %s', $effect->kind)),
-            $ui->text(sprintf('Summary: %s', $effect->summary)),
+        return column(
+            text(sprintf('Kind: %s', $effect->kind)),
+            text(sprintf('Summary: %s', $effect->summary)),
         );
     }
 
-    private static function renderArguments(Ui $ui, PendingEffect $effect): Renderable
+    private static function renderArguments(PendingEffect $effect): Renderable
     {
         if ($effect->arguments === []) {
-            return $ui->text('No arguments');
+            return text('No arguments');
         }
 
         $rows = [];
         foreach ($effect->arguments as $key => $value) {
-            $rows[] = $ui->text(sprintf('%s: %s', $key, $value));
+            $rows[] = text(sprintf('%s: %s', $key, $value));
         }
 
-        return $ui->column(...$rows);
+        return column(...$rows);
     }
 
-    private static function renderHazardLevel(Ui $ui, PendingEffect $effect): Renderable
+    private static function renderHazardLevel(PendingEffect $effect): Renderable
     {
         $label = match ($effect->hazardLevel) {
             0 => 'Safe',
@@ -61,11 +65,11 @@ class EffectApprovalOverlay implements Component
             default => 'High',
         };
 
-        return $ui->text(sprintf('Hazard: %s', $label));
+        return text(sprintf('Hazard: %s', $label));
     }
 
-    private static function renderActions(Ui $ui): Renderable
+    private static function renderActions(): Renderable
     {
-        return $ui->text('[A] Approve  [D] Deny');
+        return text('[A] Approve  [D] Deny');
     }
 }

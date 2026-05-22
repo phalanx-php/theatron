@@ -65,7 +65,7 @@ final class StubScreen implements \Phalanx\Theatron\Contract\Screen
 {
     public function __invoke(\Phalanx\Theatron\Context\ScreenContext $ctx): \Phalanx\Theatron\Tdom\Renderable
     {
-        return $ctx->ui->text('stub');
+        return \Phalanx\Theatron\Ui\text('stub');
     }
 }
 

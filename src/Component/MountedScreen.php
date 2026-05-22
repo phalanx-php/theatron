@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Phalanx\Theatron\Component;
 
 use Phalanx\Scope\TaskScope;
+use Phalanx\Theatron\Context\RenderEnvironment;
 use Phalanx\Theatron\Context\ScreenContext;
 use Phalanx\Theatron\Contract\Disposable as TheatronDisposable;
 use Phalanx\Theatron\Contract\Mountable;
@@ -18,6 +19,8 @@ use Phalanx\Theatron\Reactive\Tracker;
 use Phalanx\Theatron\State\StoreSubscription;
 use Phalanx\Theatron\Tdom\Renderable;
 use Throwable;
+
+use function Phalanx\Theatron\Ui\text;
 
 final class MountedScreen
 {
@@ -68,7 +71,7 @@ final class MountedScreen
     public function render(ScreenContext $ctx): Renderable
     {
         if ($this->isDisposed) {
-            return $this->lastResult ?? $ctx->ui->text('');
+            return $this->lastResult ?? text('');
         }
 
         $this->renderCtx = $ctx;
@@ -80,33 +83,36 @@ final class MountedScreen
             return $ctx->renderDiagnostics->screen(
                 $ctx->scope,
                 $screen,
-                static function () use ($ctx, $screen, $mounted): Renderable {
-                    $ctx->mountSystem->enterFrame($mounted);
-                    $commitMountFrame = false;
-                    try {
-                        $frame = Tracker::push();
-                        $popped = false;
+                static fn(): Renderable => RenderEnvironment::withTheme(
+                    $ctx->theme,
+                    static function () use ($ctx, $screen, $mounted): Renderable {
+                        $ctx->mountSystem->enterFrame($mounted);
+                        $commitMountFrame = false;
                         try {
-                            $result = $ctx->mountSystem->resolve(
-                                $screen($ctx),
-                            );
-                            $deps = Tracker::pop($frame);
-                            $popped = true;
-                        } finally {
-                            if (!$popped) {
-                                Tracker::pop($frame);
+                            $frame = Tracker::push();
+                            $popped = false;
+                            try {
+                                $result = $ctx->mountSystem->resolve(
+                                    $screen($ctx),
+                                );
+                                $deps = Tracker::pop($frame);
+                                $popped = true;
+                            } finally {
+                                if (!$popped) {
+                                    Tracker::pop($frame);
+                                }
                             }
+
+                            $mounted->renderDependencies->reconcile($deps);
+                            $mounted->lastResult = $result;
+                            $commitMountFrame = true;
+
+                            return $result;
+                        } finally {
+                            $ctx->mountSystem->leaveFrame($mounted, $commitMountFrame);
                         }
-
-                        $mounted->renderDependencies->reconcile($deps);
-                        $mounted->lastResult = $result;
-                        $commitMountFrame = true;
-
-                        return $result;
-                    } finally {
-                        $ctx->mountSystem->leaveFrame($mounted, $commitMountFrame);
-                    }
-                },
+                    },
+                ),
             );
         } catch (Throwable $e) {
             $this->dirty->request();

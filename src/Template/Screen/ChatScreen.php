@@ -17,10 +17,8 @@ use Phalanx\Theatron\Layout\Size;
 use Phalanx\Theatron\Reactive\Signal;
 use Phalanx\Theatron\Style\Color;
 use Phalanx\Theatron\Style\Style as TextStyle;
-use Phalanx\Theatron\Tdom\Element\ColumnElement;
 use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Tdom\Style as TdomStyle;
-use Phalanx\Theatron\Tdom\Ui;
 use Phalanx\Theatron\Template\AppStore;
 use Phalanx\Theatron\Template\Render\MarkdownRenderer;
 use Phalanx\Theatron\Template\Slice\ActivityStatus;
@@ -28,6 +26,10 @@ use Phalanx\Theatron\Template\Slice\ConversationMessage;
 use Phalanx\Theatron\Template\Slice\ConversationSlice;
 use Phalanx\Theatron\Text\Line;
 use Phalanx\Theatron\Text\Span;
+
+use function Phalanx\Theatron\Ui\column;
+use function Phalanx\Theatron\Ui\input;
+use function Phalanx\Theatron\Ui\text;
 
 class ChatScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBindings
 {
@@ -49,20 +51,20 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBinding
 
     public function __invoke(ScreenContext $ctx): Renderable
     {
-        return $ctx->ui->column(
-            $this->renderConversation($ctx->ui, 120, 18),
-            self::spacer($ctx->ui),
-            $this->renderStatusLine($ctx->ui),
-            self::spacer($ctx->ui),
-            $this->renderInput($ctx->ui),
-            self::rule($ctx->ui, 30),
-            self::spacer($ctx->ui),
+        return column(
+            $this->renderConversation(120, 18),
+            self::spacer(),
+            $this->renderStatusLine(),
+            self::spacer(),
+            $this->renderInput(),
+            self::rule(30),
+            self::spacer(),
         );
     }
 
-    public function statusBar(Ui $ui): Renderable
+    public function statusBar(): Renderable
     {
-        return $ui->text(
+        return text(
             Line::from(
                 Span::styled('  ^P', TextStyle::new()->fg(Color::indexed(245))),
                 Span::styled(' up', TextStyle::new()->fg(Color::indexed(250))),
@@ -173,19 +175,19 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBinding
         $this->store->input = $this->store->input->withText($this->inputText->get());
     }
 
-    private static function row(Ui $ui, Line $line): Renderable
+    private static function row(Line $line): Renderable
     {
-        return $ui->text($line, TdomStyle::of(size: Size::fixed(1)));
+        return text($line, TdomStyle::of(size: Size::fixed(1)));
     }
 
-    private static function spacer(Ui $ui): Renderable
+    private static function spacer(): Renderable
     {
-        return self::row($ui, Line::plain(''));
+        return self::row(Line::plain(''));
     }
 
-    private static function rule(Ui $ui, int $width): Renderable
+    private static function rule(int $width): Renderable
     {
-        return self::row($ui, Line::from(
+        return self::row(Line::from(
             Span::styled('  ' . str_repeat('╴', $width), TextStyle::new()->fg(Color::indexed(236))),
         ));
     }
@@ -227,7 +229,7 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBinding
      * @param list<Renderable> $rows
      * @return list<Renderable>
      */
-    private static function viewport(array $rows, int $maxRows, bool $stickToBottom, Ui $ui): array
+    private static function viewport(array $rows, int $maxRows, bool $stickToBottom): array
     {
         if (count($rows) <= $maxRows) {
             if (!$stickToBottom) {
@@ -236,7 +238,7 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBinding
 
             $spacers = [];
             for ($i = 0; $i < $maxRows - count($rows); $i++) {
-                $spacers[] = self::spacer($ui);
+                $spacers[] = self::spacer();
             }
 
             return [...$spacers, ...$rows];
@@ -247,11 +249,11 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBinding
             : array_slice($rows, 0, $maxRows);
     }
 
-    private function renderConversation(Ui $ui, int $width, int $availableHeight): Renderable
+    private function renderConversation(int $width, int $availableHeight): Renderable
     {
         $conversation = $this->store->conversation;
         $rows = [
-            self::row($ui, Line::from(
+            self::row(Line::from(
                 Span::styled("  Λ̬ ", TextStyle::new()->fg(Color::indexed(250))),
                 Span::styled('Theatron', TextStyle::new()->fg(Color::indexed(250))->bold()),
                 self::pipe(),
@@ -259,25 +261,25 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBinding
             )),
         ];
 
-        $body = $this->renderConversationRows($ui, $conversation, max(20, $width - 2));
-        $visible = self::viewport($body, max(1, $availableHeight - 1), $conversation->scrollOffset === 0, $ui);
+        $body = $this->renderConversationRows($conversation, max(20, $width - 2));
+        $visible = self::viewport($body, max(1, $availableHeight - 1), $conversation->scrollOffset === 0);
 
-        return new ColumnElement([...$rows, ...$visible], TdomStyle::of(size: Size::fill()));
+        return column(...[...$rows, ...$visible])->styled(TdomStyle::of(size: Size::fill()));
     }
 
     /** @return list<Renderable> */
-    private function renderConversationRows(Ui $ui, ConversationSlice $conversation, int $wrapWidth): array
+    private function renderConversationRows(ConversationSlice $conversation, int $wrapWidth): array
     {
         if ($conversation->messages === []) {
             return [
-                self::row($ui, Line::from(
+                self::row(Line::from(
                     Span::styled('  Type a message to begin.', TextStyle::new()->fg(Color::indexed(242))),
                 )),
             ];
         }
 
         if ($conversation->expandedIndex !== null) {
-            return $this->renderExchange($ui, $conversation, $conversation->expandedIndex, $wrapWidth);
+            return $this->renderExchange($conversation, $conversation->expandedIndex, $wrapWidth);
         }
 
         $rows = [];
@@ -286,18 +288,18 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBinding
 
         foreach ($indexes as $userIndex) {
             if ($userIndex === $lastUserIndex) {
-                $rows = [...$rows, ...$this->renderExchange($ui, $conversation, $userIndex, $wrapWidth)];
+                $rows = [...$rows, ...$this->renderExchange($conversation, $userIndex, $wrapWidth)];
                 continue;
             }
 
-            $rows = [...$rows, ...$this->renderSummary($ui, $conversation, $userIndex, $wrapWidth)];
+            $rows = [...$rows, ...$this->renderSummary($conversation, $userIndex, $wrapWidth)];
         }
 
         return $rows;
     }
 
     /** @return list<Renderable> */
-    private function renderSummary(Ui $ui, ConversationSlice $conversation, int $userIndex, int $wrapWidth): array
+    private function renderSummary(ConversationSlice $conversation, int $userIndex, int $wrapWidth): array
     {
         $user = $conversation->messages[$userIndex];
         $assistant = $this->assistantAfter($conversation, $userIndex);
@@ -305,11 +307,11 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBinding
 
         $userStyle = TextStyle::new()->fg(Color::indexed(250));
         foreach (self::wrapIndented($user->text, $wrapWidth, '  > ', $userStyle) as $line) {
-            $rows[] = self::row($ui, $line);
+            $rows[] = self::row($line);
         }
 
         $summaryRule = '  ' . str_repeat('─', min((int) ($wrapWidth * 0.6), 80));
-        $rows[] = self::row($ui, Line::from(
+        $rows[] = self::row(Line::from(
             Span::styled($summaryRule, TextStyle::new()->fg(Color::indexed(238))),
         ));
 
@@ -317,46 +319,46 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBinding
             $preview = MarkdownRenderer::stripSyntax(mb_substr($assistant->text, 0, 100));
             $previewStyle = TextStyle::new()->fg(Color::indexed(245));
             foreach (self::wrapIndented($preview, $wrapWidth, '    ', $previewStyle) as $line) {
-                $rows[] = self::row($ui, $line);
+                $rows[] = self::row($line);
             }
         }
 
-        $rows[] = self::row($ui, Line::plain(''));
+        $rows[] = self::row(Line::plain(''));
 
         return $rows;
     }
 
     /** @return list<Renderable> */
-    private function renderExchange(Ui $ui, ConversationSlice $conversation, int $userIndex, int $wrapWidth): array
+    private function renderExchange(ConversationSlice $conversation, int $userIndex, int $wrapWidth): array
     {
         $user = $conversation->messages[$userIndex];
         $assistant = $this->assistantAfter($conversation, $userIndex);
-        $rows = [self::row($ui, Line::plain(''))];
-        $rows[] = self::row($ui, Line::from(
+        $rows = [self::row(Line::plain(''))];
+        $rows[] = self::row(Line::from(
             Span::styled('  you: ', TextStyle::new()->fg(Color::indexed(255))->bold()),
             Span::styled($user->text, TextStyle::new()->fg(Color::indexed(252))),
         ));
         $exchangeRule = '  ' . str_repeat('─', min(24, (int) ($wrapWidth * 0.2)));
-        $rows[] = self::row($ui, Line::from(Span::styled($exchangeRule, TextStyle::new()->fg(Color::indexed(236)))));
+        $rows[] = self::row(Line::from(Span::styled($exchangeRule, TextStyle::new()->fg(Color::indexed(236)))));
 
         if ($assistant !== null) {
-            $rows[] = self::row($ui, Line::from(
+            $rows[] = self::row(Line::from(
                 Span::styled('  assistant:', TextStyle::new()->fg(Color::indexed(252))->bold()),
             ));
-            $rows = [...$rows, ...$this->markdown->render($ui, $assistant->text, $wrapWidth, '    ')];
+            $rows = [...$rows, ...$this->markdown->render($assistant->text, $wrapWidth, '    ')];
         }
 
         if ($conversation->showThinking && $conversation->thinkingBuffer !== '') {
             $thinkingStyle = TextStyle::new()->fg(Color::indexed(242));
             foreach (self::wrapIndented($conversation->thinkingBuffer, $wrapWidth, '    ', $thinkingStyle) as $line) {
-                $rows[] = self::row($ui, $line);
+                $rows[] = self::row($line);
             }
         }
 
         return $rows;
     }
 
-    private function renderStatusLine(Ui $ui): Renderable
+    private function renderStatusLine(): Renderable
     {
         $activity = $this->store->activity;
         $input = $this->store->input;
@@ -376,14 +378,14 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBinding
             $spans[] = Span::styled($queuedText, TextStyle::new()->fg(Color::indexed(242)));
         }
 
-        return self::row($ui, Line::from(...$spans));
+        return self::row(Line::from(...$spans));
     }
 
-    private function renderInput(Ui $ui): Renderable
+    private function renderInput(): Renderable
     {
         $text = (string) $this->inputText->get();
 
-        return $ui->input(
+        return input(
             value: $text,
             prompt: '  +> ',
             cursor: mb_strlen($text),

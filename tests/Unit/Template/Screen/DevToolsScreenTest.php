@@ -19,7 +19,6 @@ use Phalanx\Theatron\Tdom\Element\PanelElement;
 use Phalanx\Theatron\Tdom\Element\RowElement;
 use Phalanx\Theatron\Tdom\Element\TextElement;
 use Phalanx\Theatron\Tdom\Renderable;
-use Phalanx\Theatron\Tdom\Ui;
 use Phalanx\Theatron\Template\AppStore;
 use Phalanx\Theatron\Template\Screen\ChatScreen;
 use Phalanx\Theatron\Template\Screen\DevToolsScreen;
@@ -81,7 +80,7 @@ final class DevToolsScreenTest extends TestCase
             new RecordingNavigator(),
         );
 
-        $text = self::flatten($screen->statusBar(new Ui()));
+        $text = self::flatten($screen->statusBar());
 
         self::assertStringContainsString('↑ req', $text);
         self::assertStringContainsString('↓ req', $text);
@@ -143,7 +142,7 @@ final class DevToolsScreenTest extends TestCase
         $scope = $this->createStub(TaskScope::class);
         $mountSystem = new MountSystem($scope);
 
-        return new ScreenContext($scope, new Ui(), Theme::default(), $navigator, $mountSystem);
+        return new ScreenContext($scope, Theme::default(), $navigator, $mountSystem);
     }
 }
 

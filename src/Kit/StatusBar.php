@@ -9,7 +9,8 @@ use Phalanx\Theatron\Style\Color;
 use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Element\StatusLineElement;
 use Phalanx\Theatron\Tdom\Style;
-use Phalanx\Theatron\Tdom\Ui;
+
+use function Phalanx\Theatron\Ui\text;
 
 final class StatusBar
 {
@@ -49,12 +50,12 @@ final class StatusBar
         return $this->section($text, $color, fill: false);
     }
 
-    public function render(Ui $ui): StatusLineElement
+    public function render(): StatusLineElement
     {
         $elements = [];
 
         foreach ($this->sections as $section) {
-            $elements[] = $ui->text(
+            $elements[] = text(
                 $section->text,
                 style: Style::of(
                     size: $section->fill ? Size::fill() : null,

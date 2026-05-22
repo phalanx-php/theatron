@@ -65,7 +65,7 @@ final class WorkspaceNavigator implements Navigator
      */
     public function overlay(string $component, mixed ...$params): void
     {
-        $mounted = $this->mountSystem->mount($component, ...$params);
+        $mounted = $this->mountSystem->mountComponent($component, ...$params);
         $this->overlayStack[] = $mounted;
     }
 

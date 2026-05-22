@@ -13,7 +13,6 @@ use Phalanx\Theatron\Input\Key;
 use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Element\RowElement;
 use Phalanx\Theatron\Tdom\Element\TextElement;
-use Phalanx\Theatron\Tdom\Ui;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -23,11 +22,6 @@ use PHPUnit\Framework\TestCase;
  */
 final class BindingHintsFormatterTest extends TestCase
 {
-    private Ui $ui;
-
-    // -------------------------------------------------------------------------
-    // Data providers
-
     /** @return array<string, array{Key, string}> */
     public static function functionKeyProvider(): array
     {
@@ -38,9 +32,6 @@ final class BindingHintsFormatterTest extends TestCase
             'F12' => [Key::F12, 'F12'],
         ];
     }
-
-    // -------------------------------------------------------------------------
-    // formatCombo — key combo string
 
     #[Test]
     public function ctrlCharFormatted(): void
@@ -93,11 +84,8 @@ final class BindingHintsFormatterTest extends TestCase
     #[Test]
     public function ctrlShiftComboFormatted(): void
     {
-        // Binding::ctrl gives ctrl=true; we can't set shift via public API without
-        // using action + checking the output, so test the format contract directly.
         $binding = Binding::ctrl('p')->quit()->label('Palette');
 
-        // shift is false by default from ctrl() factory — just verify ctrl prefix.
         self::assertSame('Ctrl+p', BindingHintsFormatter::formatCombo($binding));
     }
 
@@ -111,13 +99,10 @@ final class BindingHintsFormatterTest extends TestCase
         self::assertSame($expected, BindingHintsFormatter::formatCombo($binding));
     }
 
-    // -------------------------------------------------------------------------
-    // render — RowElement structure
-
     #[Test]
     public function emptyBindingsProducesEmptyRow(): void
     {
-        $row = BindingHintsFormatter::render($this->ui, []);
+        $row = BindingHintsFormatter::render([]);
 
         self::assertInstanceOf(RowElement::class, $row);
         self::assertCount(0, $row->children);
@@ -128,7 +113,7 @@ final class BindingHintsFormatterTest extends TestCase
     {
         $quit = Binding::ctrl('c')->quit(); // no label
 
-        $row = BindingHintsFormatter::render($this->ui, [$quit]);
+        $row = BindingHintsFormatter::render([$quit]);
 
         self::assertInstanceOf(RowElement::class, $row);
         self::assertCount(0, $row->children);
@@ -137,12 +122,10 @@ final class BindingHintsFormatterTest extends TestCase
     #[Test]
     public function singleBindingProducesTwoChildren(): void
     {
-        // Leonidas — Ctrl+Q Quit
         $quit = Binding::ctrl('q')->quit()->label('Quit');
 
-        $row = BindingHintsFormatter::render($this->ui, [$quit]);
+        $row = BindingHintsFormatter::render([$quit]);
 
-        // combo text + label text; no separator for single binding
         self::assertCount(2, $row->children);
         self::assertInstanceOf(TextElement::class, $row->children[0]);
         self::assertInstanceOf(TextElement::class, $row->children[1]);
@@ -151,27 +134,23 @@ final class BindingHintsFormatterTest extends TestCase
     #[Test]
     public function twoBindingsProduceFiveChildren(): void
     {
-        // Thermopylae — two bindings separated by two-space pad
         $quit = Binding::ctrl('c')->quit()->label('Quit');
         $save = Binding::key('s')->action(static fn () => null)->label('Save');
 
-        $row = BindingHintsFormatter::render($this->ui, [$quit, $save]);
+        $row = BindingHintsFormatter::render([$quit, $save]);
 
-        // combo + label + separator + combo + label = 5
         self::assertCount(5, $row->children);
     }
 
     #[Test]
     public function threeBindingsProduceEightChildren(): void
     {
-        // Olympus — three bindings, two separators
         $quit  = Binding::ctrl('c')->quit()->label('Quit');
         $save  = Binding::key('s')->action(static fn () => null)->label('Save');
         $help  = Binding::key(Key::F1)->action(static fn () => null)->label('Help');
 
-        $row = BindingHintsFormatter::render($this->ui, [$quit, $save, $help]);
+        $row = BindingHintsFormatter::render([$quit, $save, $help]);
 
-        // 3 * 2 (combo+label) + 2 separators = 8
         self::assertCount(8, $row->children);
     }
 
@@ -180,20 +159,17 @@ final class BindingHintsFormatterTest extends TestCase
     {
         $blank = Binding::ctrl('x')->quit()->label('');
 
-        $row = BindingHintsFormatter::render($this->ui, [$blank]);
+        $row = BindingHintsFormatter::render([$blank]);
 
         self::assertCount(0, $row->children);
     }
-
-    // -------------------------------------------------------------------------
-    // RenderContext::hints() integration
 
     #[Test]
     public function hintsReturnsEmptyRowWithNoRegistry(): void
     {
         $scope = $this->createStub(\Phalanx\Scope\Scope::class);
         $mount = new MountSystem($scope);
-        $ctx = new RenderContext($scope, $this->ui, Theme::default(), $mount);
+        $ctx = new RenderContext($scope, Theme::default(), $mount);
 
         $row = $ctx->hints();
 
@@ -204,14 +180,13 @@ final class BindingHintsFormatterTest extends TestCase
     #[Test]
     public function hintsReturnsRowFromRegistry(): void
     {
-        // Sparta — global binding wired through RenderContext
         $scope = $this->createStub(\Phalanx\Scope\Scope::class);
         $mount = new MountSystem($scope);
         $registry = new BindingRegistry();
         $registry->setGlobal([
             Binding::ctrl('c')->quit()->label('Quit'),
         ]);
-        $ctx = new RenderContext($scope, $this->ui, Theme::default(), $mount, $registry);
+        $ctx = new RenderContext($scope, Theme::default(), $mount, $registry);
 
         $row = $ctx->hints();
 
@@ -222,7 +197,6 @@ final class BindingHintsFormatterTest extends TestCase
     #[Test]
     public function hintsRespectsActiveBindingsLayering(): void
     {
-        // Leonidas — overlay shadows global for same combo; only overlay appears
         $scope = $this->createStub(\Phalanx\Scope\Scope::class);
         $mount = new MountSystem($scope);
         $registry = new BindingRegistry();
@@ -232,16 +206,10 @@ final class BindingHintsFormatterTest extends TestCase
         $registry->setGlobal([$global]);
         $registry->pushOverlay('thermopylae', [$overlay]);
 
-        $ctx = new RenderContext($scope, $this->ui, Theme::default(), $mount, $registry);
+        $ctx = new RenderContext($scope, Theme::default(), $mount, $registry);
         $row = $ctx->hints();
 
-        // Only the overlay binding is visible (shadows global); 2 children = combo + label.
         self::assertInstanceOf(RowElement::class, $row);
         self::assertCount(2, $row->children);
-    }
-
-    protected function setUp(): void
-    {
-        $this->ui = new Ui(Theme::default());
     }
 }

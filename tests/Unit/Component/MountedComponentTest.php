@@ -22,7 +22,6 @@ use Phalanx\Theatron\Rendering\RenderDiagnostics;
 use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Element\TextElement;
 use Phalanx\Theatron\Tdom\Renderable;
-use Phalanx\Theatron\Tdom\Ui;
 use Phalanx\Theatron\Tests\Support\ClockProbe;
 use Phalanx\Theatron\Tests\Support\RecordingTaskScope;
 use Phalanx\Trace\TraceType;
@@ -39,7 +38,7 @@ final class MountedComponentTest extends TestCase
         $mounted = $this->createMounted(new class () implements Component {
             public function __invoke(RenderContext $ctx): Renderable
             {
-                return $ctx->ui->text('hello');
+                return \Phalanx\Theatron\Ui\text('hello');
             }
         });
 
@@ -52,7 +51,7 @@ final class MountedComponentTest extends TestCase
         $mounted = $this->createMounted(new class () implements Component {
             public function __invoke(RenderContext $ctx): Renderable
             {
-                return $ctx->ui->text('test');
+                return \Phalanx\Theatron\Ui\text('test');
             }
         });
 
@@ -65,7 +64,7 @@ final class MountedComponentTest extends TestCase
         $mounted = $this->createMounted(new class () implements Component {
             public function __invoke(RenderContext $ctx): Renderable
             {
-                return $ctx->ui->text('test');
+                return \Phalanx\Theatron\Ui\text('test');
             }
         });
 
@@ -78,7 +77,7 @@ final class MountedComponentTest extends TestCase
         $mounted = $this->createMounted(new class () implements Component {
             public function __invoke(RenderContext $ctx): Renderable
             {
-                return $ctx->ui->text('test');
+                return \Phalanx\Theatron\Ui\text('test');
             }
         });
 
@@ -93,7 +92,7 @@ final class MountedComponentTest extends TestCase
         $mounted = $this->createMounted(new class () implements Component {
             public function __invoke(RenderContext $ctx): Renderable
             {
-                return $ctx->ui->text('rendered');
+                return \Phalanx\Theatron\Ui\text('rendered');
             }
         });
 
@@ -121,7 +120,7 @@ final class MountedComponentTest extends TestCase
             {
                 $val = $this->data->get();
 
-                return $ctx->ui->text((string) $val);
+                return \Phalanx\Theatron\Ui\text((string) $val);
             }
         };
 
@@ -147,7 +146,7 @@ final class MountedComponentTest extends TestCase
 
             public function __invoke(RenderContext $ctx): Renderable
             {
-                return $ctx->ui->text((string) $this->count->get());
+                return \Phalanx\Theatron\Ui\text((string) $this->count->get());
             }
         };
 
@@ -184,7 +183,7 @@ final class MountedComponentTest extends TestCase
                     ? $this->model->a->get()
                     : $this->model->b->get();
 
-                return $ctx->ui->text((string) $value);
+                return \Phalanx\Theatron\Ui\text((string) $value);
             }
         };
 
@@ -222,7 +221,7 @@ final class MountedComponentTest extends TestCase
 
             public function __invoke(RenderContext $ctx): Renderable
             {
-                return $ctx->ui->text($this->model->reply->buffer);
+                return \Phalanx\Theatron\Ui\text($this->model->reply->buffer);
             }
         };
 
@@ -246,7 +245,7 @@ final class MountedComponentTest extends TestCase
 
             public function __invoke(RenderContext $ctx): Renderable
             {
-                return $ctx->ui->text($this->reply->buffer);
+                return \Phalanx\Theatron\Ui\text($this->reply->buffer);
             }
         };
 
@@ -285,7 +284,7 @@ final class MountedComponentTest extends TestCase
             {
                 $error = $this->model->reply->error?->getMessage() ?? '';
 
-                return $ctx->ui->text(sprintf(
+                return \Phalanx\Theatron\Ui\text(sprintf(
                     '%s:%s:%s:%s',
                     $this->model->reply->loading ? 'loading' : 'idle',
                     $this->model->reply->ok ? 'ok' : 'pending',
@@ -324,7 +323,7 @@ final class MountedComponentTest extends TestCase
 
             public function __invoke(RenderContext $ctx): Renderable
             {
-                return $ctx->ui->text((string) $this->model->label->value);
+                return \Phalanx\Theatron\Ui\text((string) $this->model->label->value);
             }
         };
 
@@ -350,7 +349,7 @@ final class MountedComponentTest extends TestCase
 
             public function __invoke(RenderContext $ctx): Renderable
             {
-                return $ctx->ui->text((string) $this->model->signal->get());
+                return \Phalanx\Theatron\Ui\text((string) $this->model->signal->get());
             }
         };
 
@@ -386,7 +385,7 @@ final class MountedComponentTest extends TestCase
                     throw new \RuntimeException('render failed');
                 }
 
-                return $ctx->ui->text((string) $this->model->good->get());
+                return \Phalanx\Theatron\Ui\text((string) $this->model->good->get());
             }
         };
 
@@ -451,7 +450,7 @@ final class MountedComponentTest extends TestCase
                     ? $this->model->bad->get()
                     : $this->model->good->get();
 
-                return $ctx->ui->text((string) $value);
+                return \Phalanx\Theatron\Ui\text((string) $value);
             }
         };
 
@@ -488,7 +487,7 @@ final class MountedComponentTest extends TestCase
             {
                 $this->tracker->renderCount++;
 
-                return $ctx->ui->text('render ' . $this->tracker->renderCount);
+                return \Phalanx\Theatron\Ui\text('render ' . $this->tracker->renderCount);
             }
         };
 
@@ -513,7 +512,7 @@ final class MountedComponentTest extends TestCase
 
             public function __invoke(RenderContext $ctx): Renderable
             {
-                return $ctx->ui->text('test');
+                return \Phalanx\Theatron\Ui\text('test');
             }
         };
 
@@ -544,7 +543,7 @@ final class MountedComponentTest extends TestCase
 
             public function __invoke(RenderContext $ctx): Renderable
             {
-                return $ctx->ui->text((string) $this->input->get());
+                return \Phalanx\Theatron\Ui\text((string) $this->input->get());
             }
         };
 
@@ -571,7 +570,7 @@ final class MountedComponentTest extends TestCase
 
             public function __invoke(RenderContext $ctx): Renderable
             {
-                return $ctx->ui->text('test');
+                return \Phalanx\Theatron\Ui\text('test');
             }
 
             public function dispose(): void
@@ -599,7 +598,7 @@ final class MountedComponentTest extends TestCase
 
             public function __invoke(RenderContext $ctx): Renderable
             {
-                return $ctx->ui->text('test');
+                return \Phalanx\Theatron\Ui\text('test');
             }
 
             public function dispose(): void
@@ -630,7 +629,7 @@ final class MountedComponentTest extends TestCase
             {
                 $this->tracker->renderCount++;
 
-                return $ctx->ui->text('test');
+                return \Phalanx\Theatron\Ui\text('test');
             }
         };
 
@@ -659,7 +658,7 @@ final class MountedComponentTest extends TestCase
             {
                 $this->tracker->renderCount++;
 
-                return $ctx->ui->text('test');
+                return \Phalanx\Theatron\Ui\text('test');
             }
         };
 
@@ -710,7 +709,7 @@ final class MountedComponentTest extends TestCase
 
             public function __invoke(RenderContext $ctx): Renderable
             {
-                return $ctx->ui->text('test');
+                return \Phalanx\Theatron\Ui\text('test');
             }
         };
 
@@ -735,7 +734,7 @@ final class MountedComponentTest extends TestCase
 
             public function __invoke(RenderContext $ctx): Renderable
             {
-                return $ctx->ui->text((string) $this->external->get());
+                return \Phalanx\Theatron\Ui\text((string) $this->external->get());
             }
         };
 
@@ -758,7 +757,7 @@ final class MountedComponentTest extends TestCase
 
             public function __invoke(RenderContext $ctx): Renderable
             {
-                return $ctx->ui->text('test');
+                return \Phalanx\Theatron\Ui\text('test');
             }
         };
 
@@ -959,7 +958,6 @@ final class MountedComponentTest extends TestCase
 
         return new RenderContext(
             $scope,
-            new Ui(),
             Theme::default(),
             new MountSystem($scope),
         );
@@ -971,7 +969,6 @@ final class MountedComponentTest extends TestCase
     ): RenderContext {
         return new RenderContext(
             $scope,
-            new Ui(),
             Theme::default(),
             new MountSystem($scope),
             renderDiagnostics: $diagnostics,
@@ -988,7 +985,7 @@ final class RenderDiagnosticFailingChildComponent implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text('unreachable');
+        return \Phalanx\Theatron\Ui\text('unreachable');
     }
 }
 
@@ -996,7 +993,7 @@ final class RenderDiagnosticFailingMountLifecycleChildComponent implements Compo
 {
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text('child');
+        return \Phalanx\Theatron\Ui\text('child');
     }
 
     public function onMount(TaskScope $scope): void
@@ -1013,6 +1010,6 @@ final class RenderDiagnosticSlowComponent implements Component
 {
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text('slow');
+        return \Phalanx\Theatron\Ui\text('slow');
     }
 }

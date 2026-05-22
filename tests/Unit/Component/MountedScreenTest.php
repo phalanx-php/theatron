@@ -19,7 +19,6 @@ use Phalanx\Theatron\Reactive\Signal;
 use Phalanx\Theatron\Rendering\RenderDiagnostics;
 use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Renderable;
-use Phalanx\Theatron\Tdom\Ui;
 use Phalanx\Theatron\Tests\Support\ClockProbe;
 use Phalanx\Theatron\Tests\Support\RecordingTaskScope;
 use Phalanx\Trace\TraceType;
@@ -47,7 +46,7 @@ final class MountedScreenTest extends TestCase
                     ? $this->model->a->get()
                     : $this->model->b->get();
 
-                return $ctx->ui->text((string) $value);
+                return \Phalanx\Theatron\Ui\text((string) $value);
             }
         };
 
@@ -91,7 +90,7 @@ final class MountedScreenTest extends TestCase
                     throw new \RuntimeException('screen failed');
                 }
 
-                return $ctx->ui->text((string) $this->model->good->get());
+                return \Phalanx\Theatron\Ui\text((string) $this->model->good->get());
             }
         };
 
@@ -137,7 +136,7 @@ final class MountedScreenTest extends TestCase
 
             public function __invoke(ScreenContext $ctx): Renderable
             {
-                return $ctx->ui->text($this->model->label->value . ':' . $this->model->reply->buffer);
+                return \Phalanx\Theatron\Ui\text($this->model->label->value . ':' . $this->model->reply->buffer);
             }
         };
 
@@ -169,7 +168,7 @@ final class MountedScreenTest extends TestCase
 
             public function __invoke(ScreenContext $ctx): Renderable
             {
-                return $ctx->ui->text((string) $this->model->signal->get());
+                return \Phalanx\Theatron\Ui\text((string) $this->model->signal->get());
             }
         };
 
@@ -202,7 +201,7 @@ final class MountedScreenTest extends TestCase
                     ? $this->model->bad->get()
                     : $this->model->good->get();
 
-                return $ctx->ui->text((string) $value);
+                return \Phalanx\Theatron\Ui\text((string) $value);
             }
         };
 
@@ -335,7 +334,6 @@ final class MountedScreenTest extends TestCase
 
         return new ScreenContext(
             $scope,
-            new Ui(),
             Theme::default(),
             $this->createStub(Navigator::class),
             new MountSystem($scope),
@@ -348,7 +346,6 @@ final class MountedScreenTest extends TestCase
     ): ScreenContext {
         return new ScreenContext(
             $scope,
-            new Ui(),
             Theme::default(),
             $this->createStub(Navigator::class),
             new MountSystem($scope),
@@ -361,6 +358,6 @@ final class RenderDiagnosticSlowScreen implements Screen
 {
     public function __invoke(ScreenContext $ctx): Renderable
     {
-        return $ctx->ui->text('slow');
+        return \Phalanx\Theatron\Ui\text('slow');
     }
 }

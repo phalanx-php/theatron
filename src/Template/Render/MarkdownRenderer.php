@@ -24,9 +24,10 @@ use Phalanx\Theatron\Style\Color;
 use Phalanx\Theatron\Style\Style;
 use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Tdom\Style as TdomStyle;
-use Phalanx\Theatron\Tdom\Ui;
 use Phalanx\Theatron\Text\Line;
 use Phalanx\Theatron\Text\Span;
+
+use function Phalanx\Theatron\Ui\text;
 
 class MarkdownRenderer
 {
@@ -59,25 +60,22 @@ class MarkdownRenderer
     }
 
     /** @return list<Renderable> */
-    public function render(Ui $ui, string $markdown, int $wrapWidth, string $indent = '    '): array
+    public function render(string $markdown, int $wrapWidth, string $indent = '    '): array
     {
         $rows = [];
         $this->renderChildren($this->parser->parse($markdown), $indent, $wrapWidth, $rows);
 
-        return array_map(
-            static fn(Line $line): Renderable => $ui->text($line, TdomStyle::of(size: Size::fixed(1))),
-            $rows,
-        );
+        return $this->renderBodyRows($rows);
     }
 
     /**
      * @param list<Line> $rows
      * @return list<Renderable>
      */
-    public function renderBodyRows(Ui $ui, array $rows): array
+    public function renderBodyRows(array $rows): array
     {
         return array_map(
-            static fn(Line $line): Renderable => $ui->text($line, TdomStyle::of(size: Size::fixed(1))),
+            static fn(Line $line): Renderable => text($line, TdomStyle::of(size: Size::fixed(1))),
             $rows,
         );
     }

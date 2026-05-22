@@ -8,7 +8,6 @@ use Phalanx\Theatron\Context\ScreenContext;
 use Phalanx\Theatron\Contract\HasStatusBar;
 use Phalanx\Theatron\Contract\Screen;
 use Phalanx\Theatron\Tdom\Renderable;
-use Phalanx\Theatron\Tdom\Ui;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -20,12 +19,12 @@ final class HasStatusBarTest extends TestCase
         $screen = new class () implements Screen, HasStatusBar {
             public function __invoke(ScreenContext $ctx): Renderable
             {
-                return $ctx->ui->text('Olympus');
+                return \Phalanx\Theatron\Ui\text('Olympus');
             }
 
-            public function statusBar(Ui $ui): Renderable
+            public function statusBar(): Renderable
             {
-                return $ui->text('-- NORMAL --');
+                return \Phalanx\Theatron\Ui\text('-- NORMAL --');
             }
         };
 
@@ -36,16 +35,14 @@ final class HasStatusBarTest extends TestCase
     #[Test]
     public function statusBarReturnsRenderable(): void
     {
-        $ui = new Ui();
-
         $screen = new class () implements HasStatusBar {
-            public function statusBar(Ui $ui): Renderable
+            public function statusBar(): Renderable
             {
-                return $ui->text('Thermopylae');
+                return \Phalanx\Theatron\Ui\text('Thermopylae');
             }
         };
 
-        $result = $screen->statusBar($ui);
+        $result = $screen->statusBar();
 
         self::assertInstanceOf(Renderable::class, $result);
     }

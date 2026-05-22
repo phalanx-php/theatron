@@ -8,7 +8,6 @@ use Phalanx\Theatron\Kit\StatusBar;
 use Phalanx\Theatron\Style\Color;
 use Phalanx\Theatron\Tdom\Element\StatusLineElement;
 use Phalanx\Theatron\Tdom\Element\TextElement;
-use Phalanx\Theatron\Tdom\Ui;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -59,7 +58,7 @@ final class StatusBarTest extends TestCase
     public function renderProducesStatusLineElement(): void
     {
         $bar = StatusBar::new()->section('status');
-        $element = $bar->render(new Ui());
+        $element = $bar->render();
 
         self::assertInstanceOf(StatusLineElement::class, $element);
     }
@@ -72,7 +71,7 @@ final class StatusBarTest extends TestCase
             ->section('b')
             ->right('c');
 
-        $element = $bar->render(new Ui());
+        $element = $bar->render();
 
         self::assertCount(3, $element->sections);
     }
@@ -80,7 +79,7 @@ final class StatusBarTest extends TestCase
     #[Test]
     public function renderWithNoSectionsProducesEmptyStatusLine(): void
     {
-        $element = StatusBar::new()->render(new Ui());
+        $element = StatusBar::new()->render();
 
         self::assertCount(0, $element->sections);
     }
@@ -88,7 +87,7 @@ final class StatusBarTest extends TestCase
     #[Test]
     public function leftSectionTextIsPreserved(): void
     {
-        $element = StatusBar::new()->left('Thermopylae')->render(new Ui());
+        $element = StatusBar::new()->left('Thermopylae')->render();
 
         self::assertCount(1, $element->sections);
         $section = $element->sections[0];

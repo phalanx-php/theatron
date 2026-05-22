@@ -19,12 +19,14 @@ use Phalanx\Theatron\Style\Color;
 use Phalanx\Theatron\Style\Style as TextStyle;
 use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Tdom\Style as TdomStyle;
-use Phalanx\Theatron\Tdom\Ui;
 use Phalanx\Theatron\Template\AppStore;
 use Phalanx\Theatron\Template\Render\CodeHighlighter;
 use Phalanx\Theatron\Template\Slice\LlmRequestEntry;
 use Phalanx\Theatron\Text\Line;
 use Phalanx\Theatron\Text\Span;
+
+use function Phalanx\Theatron\Ui\column;
+use function Phalanx\Theatron\Ui\text;
 
 class LlmRequestDetailScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBindings, NormalModeHandler
 {
@@ -41,17 +43,17 @@ class LlmRequestDetailScreen implements Screen, HasStatusBar, HasFocusables, Dec
         $entry = $this->store->requests->focused();
 
         if ($entry === null) {
-            return $ctx->ui->text('  No request selected.');
+            return text('  No request selected.');
         }
 
-        $rows = array_slice($this->rows($ctx->ui, $entry), $this->store->requests->detailScrollOffset, 40);
+        $rows = array_slice($this->rows($entry), $this->store->requests->detailScrollOffset, 40);
 
-        return $ctx->ui->column(...$rows);
+        return column(...$rows);
     }
 
-    public function statusBar(Ui $ui): Renderable
+    public function statusBar(): Renderable
     {
-        return $ui->text(
+        return text(
             Line::from(
                 Span::styled('  Up', TextStyle::new()->fg(Color::indexed(245))),
                 Span::styled(' scroll', TextStyle::new()->fg(Color::indexed(250))),
@@ -102,14 +104,14 @@ class LlmRequestDetailScreen implements Screen, HasStatusBar, HasFocusables, Dec
         return false;
     }
 
-    private static function row(Ui $ui, Line $line): Renderable
+    private static function row(Line $line): Renderable
     {
-        return $ui->text($line, TdomStyle::of(size: Size::fixed(1)));
+        return text($line, TdomStyle::of(size: Size::fixed(1)));
     }
 
-    private static function blank(Ui $ui): Renderable
+    private static function blank(): Renderable
     {
-        return self::row($ui, Line::plain(''));
+        return self::row(Line::plain(''));
     }
 
     private static function pipe(): Span
@@ -138,40 +140,40 @@ class LlmRequestDetailScreen implements Screen, HasStatusBar, HasFocusables, Dec
     }
 
     /** @return list<Renderable> */
-    private function rows(Ui $ui, LlmRequestEntry $entry): array
+    private function rows(LlmRequestEntry $entry): array
     {
         $status = $entry->error !== null ? 'ERR: ' . $entry->error : (($entry->status ?? 'pending') . ' OK');
         $time = $entry->elapsedMs !== null ? number_format($entry->elapsedMs, 1) . 'ms' : '...';
         $tokens = $entry->tokenCount !== null ? $entry->tokenCount . ' tokens' : '';
         $rows = [
-            self::row($ui, Line::from(
+            self::row(Line::from(
                 Span::styled("  ── {$entry->method} {$entry->path} ─────────────────────────", self::headerStyle()),
             )),
-            self::blank($ui),
-            self::row($ui, Line::from(
+            self::blank(),
+            self::row(Line::from(
                 Span::styled('  Status: ', self::labelStyle()),
                 Span::styled($status, self::valueStyle()),
                 Span::styled("  Time: {$time}", self::labelStyle()),
                 Span::styled("  {$tokens}", self::valueStyle()),
             )),
-            self::blank($ui),
-            self::row($ui, Line::from(Span::styled('  Request Body', self::headerStyle()))),
-            self::row($ui, Line::from(Span::styled('  ' . str_repeat('─', 40), self::dimStyle()))),
+            self::blank(),
+            self::row(Line::from(Span::styled('  Request Body', self::headerStyle()))),
+            self::row(Line::from(Span::styled('  ' . str_repeat('─', 40), self::dimStyle()))),
         ];
 
-        $rows = [...$rows, ...$this->bodyRows($ui, $entry->requestBody)];
-        $rows[] = self::blank($ui);
-        $rows[] = self::row($ui, Line::from(Span::styled('  Response Body', self::headerStyle())));
-        $rows[] = self::row($ui, Line::from(Span::styled('  ' . str_repeat('─', 40), self::dimStyle())));
+        $rows = [...$rows, ...$this->bodyRows($entry->requestBody)];
+        $rows[] = self::blank();
+        $rows[] = self::row(Line::from(Span::styled('  Response Body', self::headerStyle())));
+        $rows[] = self::row(Line::from(Span::styled('  ' . str_repeat('─', 40), self::dimStyle())));
 
-        return [...$rows, ...$this->bodyRows($ui, $entry->responseBody)];
+        return [...$rows, ...$this->bodyRows($entry->responseBody)];
     }
 
     /** @return list<Renderable> */
-    private function bodyRows(Ui $ui, ?string $body): array
+    private function bodyRows(?string $body): array
     {
         if ($body === null || $body === '') {
-            return [self::row($ui, Line::from(Span::styled('    (empty)', self::dimStyle())))];
+            return [self::row(Line::from(Span::styled('    (empty)', self::dimStyle())))];
         }
 
         $decoded = json_decode($body, true);
@@ -181,7 +183,7 @@ class LlmRequestDetailScreen implements Screen, HasStatusBar, HasFocusables, Dec
         $rows = [];
 
         foreach ($this->highlighter->highlight((string) $pretty, 'json') as $line) {
-            $rows[] = self::row($ui, Line::from(Span::plain('    '), ...$line->spans));
+            $rows[] = self::row(Line::from(Span::plain('    '), ...$line->spans));
         }
 
         return $rows;

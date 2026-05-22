@@ -4,39 +4,51 @@ declare(strict_types=1);
 
 namespace Phalanx\Theatron\Tests\Unit\Styling;
 
+use Phalanx\Theatron\Context\RenderEnvironment;
 use Phalanx\Theatron\Style\Style as AnsiStyle;
 use Phalanx\Theatron\Styling\BBCode;
 use Phalanx\Theatron\Styling\Theme;
-use Phalanx\Theatron\Tdom\Ui;
 use Phalanx\Theatron\Text\Line;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+
+use function Phalanx\Theatron\Ui\input;
+use function Phalanx\Theatron\Ui\panel;
+use function Phalanx\Theatron\Ui\progress;
+use function Phalanx\Theatron\Ui\spinner;
+use function Phalanx\Theatron\Ui\text;
 
 final class UiMarkupTest extends TestCase
 {
     #[Test]
     public function panelTitleWithThemeParsesMarkup(): void
     {
-        $ui = new Ui(Theme::default());
-        $panel = $ui->panel('[accent]Apollo[/]', $ui->text('body'));
+        $theme = Theme::default();
+        $panel = RenderEnvironment::withTheme(
+            $theme,
+            static fn() => panel('[accent]Apollo[/]', text('body')),
+        );
 
         self::assertInstanceOf(Line::class, $panel->title);
+        self::assertStyledSpan($panel->title, 'Apollo', $theme->accent);
     }
 
     #[Test]
     public function panelTitleWithoutThemeStaysString(): void
     {
-        $ui = new Ui();
-        $panel = $ui->panel('[accent]Apollo[/]', $ui->text('body'));
+        $panel = panel('[accent]Apollo[/]', text('body'));
 
         self::assertIsString($panel->title);
+        self::assertSame('[accent]Apollo[/]', $panel->title);
     }
 
     #[Test]
     public function panelTitleWithoutBracketsStaysString(): void
     {
-        $ui = new Ui(Theme::default());
-        $panel = $ui->panel('Dashboard', $ui->text('body'));
+        $panel = RenderEnvironment::withTheme(
+            Theme::default(),
+            static fn() => panel('Dashboard', text('body')),
+        );
 
         self::assertIsString($panel->title);
         self::assertSame('Dashboard', $panel->title);
@@ -45,26 +57,32 @@ final class UiMarkupTest extends TestCase
     #[Test]
     public function spinnerLabelWithThemeParsesMarkup(): void
     {
-        $ui = new Ui(Theme::default());
-        $spinner = $ui->spinner('[success]Loading[/]');
+        $theme = Theme::default();
+        $spinner = RenderEnvironment::withTheme(
+            $theme,
+            static fn() => spinner('[success]Loading[/]'),
+        );
 
         self::assertInstanceOf(Line::class, $spinner->label);
+        self::assertStyledSpan($spinner->label, 'Loading', $theme->success);
     }
 
     #[Test]
     public function spinnerLabelWithoutThemeStaysString(): void
     {
-        $ui = new Ui();
-        $spinner = $ui->spinner('[success]Loading[/]');
+        $spinner = spinner('[success]Loading[/]');
 
         self::assertIsString($spinner->label);
+        self::assertSame('[success]Loading[/]', $spinner->label);
     }
 
     #[Test]
     public function spinnerNullLabelStaysNull(): void
     {
-        $ui = new Ui(Theme::default());
-        $spinner = $ui->spinner();
+        $spinner = RenderEnvironment::withTheme(
+            Theme::default(),
+            static fn() => spinner(),
+        );
 
         self::assertNull($spinner->label);
     }
@@ -72,26 +90,34 @@ final class UiMarkupTest extends TestCase
     #[Test]
     public function inputPromptWithThemeParsesMarkup(): void
     {
-        $ui = new Ui(Theme::default());
-        $input = $ui->input(prompt: '[accent]>[/] ');
+        $theme = Theme::default();
+        $input = RenderEnvironment::withTheme(
+            $theme,
+            static fn() => input(prompt: '[accent]>[/] '),
+        );
 
         self::assertInstanceOf(Line::class, $input->prompt);
+        self::assertStyledSpan($input->prompt, '>', $theme->accent);
+        self::assertCount(2, $input->prompt->spans);
+        self::assertSame(' ', $input->prompt->spans[1]->content);
     }
 
     #[Test]
     public function inputPromptWithoutThemeStaysString(): void
     {
-        $ui = new Ui();
-        $input = $ui->input(prompt: '[accent]>[/] ');
+        $input = input(prompt: '[accent]>[/] ');
 
         self::assertIsString($input->prompt);
+        self::assertSame('[accent]>[/] ', $input->prompt);
     }
 
     #[Test]
     public function inputPromptWithoutBracketsStaysString(): void
     {
-        $ui = new Ui(Theme::default());
-        $input = $ui->input(prompt: '> ');
+        $input = RenderEnvironment::withTheme(
+            Theme::default(),
+            static fn() => input(prompt: '> '),
+        );
 
         self::assertIsString($input->prompt);
         self::assertSame('> ', $input->prompt);
@@ -100,26 +126,34 @@ final class UiMarkupTest extends TestCase
     #[Test]
     public function progressLabelWithThemeParsesMarkup(): void
     {
-        $ui = new Ui(Theme::default());
-        $progress = $ui->progress(0.5, '[bold]CPU[/]');
+        $theme = Theme::default();
+        $boldStyle = $theme->resolve('bold');
+        self::assertNotNull($boldStyle);
+        $progress = RenderEnvironment::withTheme(
+            $theme,
+            static fn() => progress(0.5, '[bold]CPU[/]'),
+        );
 
         self::assertInstanceOf(Line::class, $progress->label);
+        self::assertStyledSpan($progress->label, 'CPU', $boldStyle);
     }
 
     #[Test]
     public function progressLabelWithoutThemeStaysString(): void
     {
-        $ui = new Ui();
-        $progress = $ui->progress(0.5, '[bold]CPU[/]');
+        $progress = progress(0.5, '[bold]CPU[/]');
 
         self::assertIsString($progress->label);
+        self::assertSame('[bold]CPU[/]', $progress->label);
     }
 
     #[Test]
     public function progressNullLabelStaysNull(): void
     {
-        $ui = new Ui(Theme::default());
-        $progress = $ui->progress(0.5);
+        $progress = RenderEnvironment::withTheme(
+            Theme::default(),
+            static fn() => progress(0.5),
+        );
 
         self::assertNull($progress->label);
     }
@@ -142,12 +176,21 @@ final class UiMarkupTest extends TestCase
     {
         $agentStyle = AnsiStyle::new()->fg('#ff6666');
         $theme = Theme::default()->withTags(['danger' => $agentStyle]);
-        $ui = new Ui($theme);
 
-        $text = $ui->text('[danger]Alert[/]');
+        $text = RenderEnvironment::withTheme(
+            $theme,
+            static fn() => text('[danger]Alert[/]'),
+        );
         $content = $text->content;
 
         self::assertInstanceOf(Line::class, $content);
         self::assertSame('Alert', $content->spans[0]->content);
+    }
+
+    private static function assertStyledSpan(Line $line, string $content, AnsiStyle $style): void
+    {
+        self::assertNotEmpty($line->spans);
+        self::assertSame($content, $line->spans[0]->content);
+        self::assertTrue($line->spans[0]->style->equals($style));
     }
 }

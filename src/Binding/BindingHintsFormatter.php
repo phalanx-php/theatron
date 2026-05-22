@@ -6,15 +6,17 @@ namespace Phalanx\Theatron\Binding;
 
 use Phalanx\Theatron\Input\Key;
 use Phalanx\Theatron\Tdom\Element\RowElement;
-use Phalanx\Theatron\Tdom\Ui;
+
+use function Phalanx\Theatron\Ui\row;
+use function Phalanx\Theatron\Ui\text;
 
 final class BindingHintsFormatter
 {
     /** @param list<Binding> $bindings */
-    public static function render(Ui $ui, array $bindings): RowElement
+    public static function render(array $bindings): RowElement
     {
         if ($bindings === []) {
-            return $ui->row();
+            return row();
         }
 
         $children = [];
@@ -29,15 +31,15 @@ final class BindingHintsFormatter
 
             $combo = self::formatCombo($binding);
 
-            $children[] = $ui->text('[muted]' . $combo . '[/]');
-            $children[] = $ui->text(' [hint]' . $label . '[/]');
+            $children[] = text('[muted]' . $combo . '[/]');
+            $children[] = text(' [hint]' . $label . '[/]');
 
             if ($i < $last) {
-                $children[] = $ui->text('  ');
+                $children[] = text('  ');
             }
         }
 
-        return $ui->row(...$children);
+        return row(...$children);
     }
 
     public static function formatCombo(Binding $binding): string

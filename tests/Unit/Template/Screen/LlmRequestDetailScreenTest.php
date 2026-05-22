@@ -17,7 +17,6 @@ use Phalanx\Theatron\Tdom\Element\PanelElement;
 use Phalanx\Theatron\Tdom\Element\RowElement;
 use Phalanx\Theatron\Tdom\Element\TextElement;
 use Phalanx\Theatron\Tdom\Renderable;
-use Phalanx\Theatron\Tdom\Ui;
 use Phalanx\Theatron\Template\AppStore;
 use Phalanx\Theatron\Template\Screen\LlmRequestDetailScreen;
 use Phalanx\Theatron\Template\Slice\LlmRequestEntry;
@@ -65,7 +64,7 @@ final class LlmRequestDetailScreenTest extends TestCase
     {
         $screen = new LlmRequestDetailScreen(new AppStore());
 
-        $text = self::flatten($screen->statusBar(new Ui()));
+        $text = self::flatten($screen->statusBar());
 
         self::assertStringContainsString('Up scroll', $text);
         self::assertStringContainsString('Dn scroll', $text);
@@ -130,6 +129,6 @@ final class LlmRequestDetailScreenTest extends TestCase
         $navigator = $this->createStub(Navigator::class);
         $mountSystem = new MountSystem($scope);
 
-        return new ScreenContext($scope, new Ui(), Theme::default(), $navigator, $mountSystem);
+        return new ScreenContext($scope, Theme::default(), $navigator, $mountSystem);
     }
 }

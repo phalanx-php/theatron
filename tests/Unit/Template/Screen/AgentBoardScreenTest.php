@@ -16,7 +16,6 @@ use Phalanx\Theatron\Tdom\Element\PanelElement;
 use Phalanx\Theatron\Tdom\Element\RowElement;
 use Phalanx\Theatron\Tdom\Element\StatusLineElement;
 use Phalanx\Theatron\Tdom\Element\TextElement;
-use Phalanx\Theatron\Tdom\Ui;
 use Phalanx\Theatron\Template\AppStore;
 use Phalanx\Theatron\Template\Screen\AgentBoardScreen;
 use Phalanx\Theatron\Template\Slice\AgentRegistrySlice;
@@ -27,8 +26,6 @@ use PHPUnit\Framework\TestCase;
 
 final class AgentBoardScreenTest extends TestCase
 {
-    // ---- __invoke tests ----
-
     #[Test]
     public function renderEmptyAgents(): void
     {
@@ -38,11 +35,9 @@ final class AgentBoardScreenTest extends TestCase
 
         $result = $screen($ctx);
 
-        // Root column has a single child — no divider/statusBar inline (those go to HasStatusBar).
         self::assertInstanceOf(ColumnElement::class, $result);
         self::assertCount(1, $result->children);
 
-        // Empty state is a TextElement wrapping a Line.
         $cardArea = $result->children[0];
         self::assertInstanceOf(TextElement::class, $cardArea);
         self::assertInstanceOf(Line::class, $cardArea->content);
@@ -70,7 +65,6 @@ final class AgentBoardScreenTest extends TestCase
         self::assertInstanceOf(ColumnElement::class, $result);
         self::assertCount(1, $result->children);
 
-        // Cards are laid out in a RowElement, one panel per agent.
         $cardArea = $result->children[0];
         self::assertInstanceOf(RowElement::class, $cardArea);
         self::assertCount(2, $cardArea->children);
@@ -99,7 +93,6 @@ final class AgentBoardScreenTest extends TestCase
         $cardArea = $result->children[0];
         self::assertInstanceOf(RowElement::class, $cardArea);
 
-        // Zeus panel body must contain the "Active" badge.
         $zeusPanel = $cardArea->children[0];
         self::assertInstanceOf(PanelElement::class, $zeusPanel);
 
@@ -109,7 +102,6 @@ final class AgentBoardScreenTest extends TestCase
         $combinedZeus = self::flattenTextChildren($zeusBody->children);
         self::assertStringContainsString('Active', $combinedZeus);
 
-        // Apollo panel body must NOT contain "Active".
         $apolloPanel = $cardArea->children[1];
         self::assertInstanceOf(PanelElement::class, $apolloPanel);
 
@@ -118,8 +110,6 @@ final class AgentBoardScreenTest extends TestCase
 
         self::assertStringNotContainsString('Active', self::flattenTextChildren($apolloBody->children));
     }
-
-    // ---- HasStatusBar tests ----
 
     #[Test]
     public function statusBarRenders(): void
@@ -130,22 +120,17 @@ final class AgentBoardScreenTest extends TestCase
             ->register(new AgentSummary(id: 'agent_apollo', name: 'Apollo', capabilities: []));
 
         $screen = new AgentBoardScreen($store);
-        $ui = new Ui();
-
-        $result = $screen->statusBar($ui);
+        $result = $screen->statusBar();
 
         self::assertInstanceOf(StatusLineElement::class, $result);
         self::assertNotEmpty($result->sections);
 
-        // Agent count must appear somewhere in the rendered sections.
         $combined = implode('', array_map(
             static fn ($el) => $el instanceof TextElement && is_string($el->content) ? $el->content : '',
             $result->sections,
         ));
         self::assertStringContainsString('2', $combined);
     }
-
-    // ---- HasFocusables tests ----
 
     #[Test]
     public function focusablesReturnsSelf(): void
@@ -157,7 +142,6 @@ final class AgentBoardScreenTest extends TestCase
 
         self::assertCount(1, $focusables);
         self::assertSame('agents', $focusables[0][0]);
-        // The screen itself is the NormalModeHandler.
         self::assertSame($screen, $focusables[0][1]);
     }
 
@@ -256,6 +240,6 @@ final class AgentBoardScreenTest extends TestCase
         $navigator = $this->createStub(Navigator::class);
         $mountSystem = new MountSystem($scope);
 
-        return new ScreenContext($scope, new Ui(), Theme::default(), $navigator, $mountSystem);
+        return new ScreenContext($scope, Theme::default(), $navigator, $mountSystem);
     }
 }

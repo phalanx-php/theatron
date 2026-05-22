@@ -86,7 +86,7 @@ final class MountSystem
      * @template T of Component
      * @param class-string<T> $component
      */
-    public function mount(string $component, mixed ...$params): MountedComponent
+    public function mountComponent(string $component, mixed ...$params): MountedComponent
     {
         $namedParams = self::extractNamedParams($params);
         $slot = $this->nextSlot();
@@ -235,7 +235,7 @@ final class MountSystem
     public function resolve(Renderable $node): Renderable
     {
         if ($node instanceof MountElement) {
-            return $this->mount($node->component, ...$node->props);
+            return $this->mountComponent($node->component, ...$node->props);
         }
 
         if ($node instanceof ColumnElement) {

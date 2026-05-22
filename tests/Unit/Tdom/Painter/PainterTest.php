@@ -34,7 +34,6 @@ use Phalanx\Theatron\Tdom\Painter\PaintContext;
 use Phalanx\Theatron\Tdom\Painter\Painter;
 use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Tdom\Style;
-use Phalanx\Theatron\Tdom\Ui;
 use Phalanx\Theatron\Text\Line;
 use Phalanx\Theatron\Text\Span;
 use PHPUnit\Framework\Attributes\Test;
@@ -364,7 +363,7 @@ final class PainterTest extends TestCase
             {
                 $this->tracker->count++;
 
-                return $ctx->ui->text('rendered');
+                return \Phalanx\Theatron\Ui\text('rendered');
             }
         };
 
@@ -374,7 +373,7 @@ final class PainterTest extends TestCase
 
         $scope = $this->createStub(\Phalanx\Scope\Scope::class);
         $mountSystem = new MountSystem($scope);
-        $ctx = new RenderContext($scope, new Ui(), Theme::default(), $mountSystem);
+        $ctx = new RenderContext($scope, Theme::default(), $mountSystem);
 
         $mounted->render($ctx);
         self::assertSame(1, $tracker->count);
@@ -405,7 +404,7 @@ final class PainterTest extends TestCase
             {
                 $this->tracker->count++;
 
-                return $ctx->ui->text('cached');
+                return \Phalanx\Theatron\Ui\text('cached');
             }
         };
 
@@ -415,7 +414,7 @@ final class PainterTest extends TestCase
 
         $scope = $this->createStub(\Phalanx\Scope\Scope::class);
         $mountSystem = new MountSystem($scope);
-        $ctx = new RenderContext($scope, new Ui(), Theme::default(), $mountSystem);
+        $ctx = new RenderContext($scope, Theme::default(), $mountSystem);
 
         $mounted->render($ctx);
         self::assertSame(1, $tracker->count);
@@ -435,7 +434,7 @@ final class PainterTest extends TestCase
         $component = new class () implements Component {
             public function __invoke(RenderContext $ctx): Renderable
             {
-                return $ctx->ui->text('never');
+                return \Phalanx\Theatron\Ui\text('never');
             }
         };
 
@@ -561,7 +560,7 @@ final class PainterTest extends TestCase
     {
         $scope = $this->createStub(\Phalanx\Scope\Scope::class);
         $mountSystem = new MountSystem($scope);
-        $renderCtx = new RenderContext($scope, new Ui(), Theme::default(), $mountSystem);
+        $renderCtx = new RenderContext($scope, Theme::default(), $mountSystem);
         $buf = Buffer::empty(20, 5);
         $paintCtx = new PaintContext(Rect::sized(20, 5), $buf, renderContext: $renderCtx);
 
@@ -576,7 +575,7 @@ final class PainterTest extends TestCase
     {
         $scope = $this->createStub(\Phalanx\Scope\Scope::class);
         $mountSystem = new MountSystem($scope);
-        $renderCtx = new RenderContext($scope, new Ui(), Theme::default(), $mountSystem);
+        $renderCtx = new RenderContext($scope, Theme::default(), $mountSystem);
         $owner = new \stdClass();
         $buf = Buffer::empty(20, 5);
         $renderable = panel('Title', mount(PainterMountChildComponent::class));
@@ -601,7 +600,7 @@ final class PainterTest extends TestCase
     {
         $scope = $this->createStub(\Phalanx\Scope\Scope::class);
         $mountSystem = new MountSystem($scope);
-        $renderCtx = new RenderContext($scope, new Ui(), Theme::default(), $mountSystem);
+        $renderCtx = new RenderContext($scope, Theme::default(), $mountSystem);
         $buf = Buffer::empty(20, 5);
         $paintCtx = new PaintContext(Rect::sized(20, 5), $buf, renderContext: $renderCtx);
         $renderable = column(
@@ -619,7 +618,7 @@ final class PainterTest extends TestCase
     {
         $scope = $this->createStub(\Phalanx\Scope\Scope::class);
         $mountSystem = new MountSystem($scope);
-        $renderCtx = new RenderContext($scope, new Ui(), Theme::default(), $mountSystem);
+        $renderCtx = new RenderContext($scope, Theme::default(), $mountSystem);
         $owner = new \stdClass();
         $buf = Buffer::empty(20, 5);
 
@@ -646,7 +645,7 @@ final class PainterTest extends TestCase
     {
         $scope = $this->createStub(\Phalanx\Scope\Scope::class);
         $mountSystem = new MountSystem($scope);
-        $renderCtx = new RenderContext($scope, new Ui(), Theme::default(), $mountSystem);
+        $renderCtx = new RenderContext($scope, Theme::default(), $mountSystem);
         $owner = new \stdClass();
         $buf = Buffer::empty(20, 5);
 
@@ -692,7 +691,7 @@ final class PainterMountChildComponent implements Component
 {
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text('Mounted');
+        return \Phalanx\Theatron\Ui\text('Mounted');
     }
 }
 
@@ -705,6 +704,6 @@ final class PainterLabelMountChildComponent implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text($this->label);
+        return \Phalanx\Theatron\Ui\text($this->label);
     }
 }

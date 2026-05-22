@@ -169,6 +169,6 @@ final class TheatronServiceBundleProbeScreen implements Screen
 {
     public function __invoke(ScreenContext $ctx): Renderable
     {
-        return $ctx->ui->text('service bundle probe');
+        return \Phalanx\Theatron\Ui\text('service bundle probe');
     }
 }

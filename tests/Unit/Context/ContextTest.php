@@ -4,58 +4,53 @@ declare(strict_types=1);
 
 namespace Phalanx\Theatron\Tests\Unit\Context;
 
-use Phalanx\Theatron\Component\MountedComponent;
 use Phalanx\Theatron\Component\MountSystem;
 use Phalanx\Theatron\Context\RenderContext;
 use Phalanx\Theatron\Context\ScreenContext;
-use Phalanx\Theatron\Contract\Component;
 use Phalanx\Theatron\Navigation\Navigator;
 use Phalanx\Theatron\Styling\Theme;
-use Phalanx\Theatron\Tdom\Renderable;
-use Phalanx\Theatron\Tdom\Ui;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use ReflectionClass;
+use ReflectionMethod;
 
 final class ContextTest extends TestCase
 {
     #[Test]
-    public function renderContextMountDelegatesToMountSystem(): void
+    public function renderContextDoesNotExposeUiOrMountAuthoring(): void
     {
         $scope = $this->createStub(\Phalanx\Scope\Scope::class);
         $mount = new MountSystem($scope);
-        $ctx = new RenderContext($scope, new Ui(), Theme::default(), $mount);
+        $ctx = new RenderContext($scope, Theme::default(), $mount);
+        $reflection = new ReflectionClass($ctx);
 
-        $mounted = $ctx->mount(ContextTestComponent::class, label: 'Zeus');
-
-        self::assertInstanceOf(MountedComponent::class, $mounted);
-
-        $result = $mounted->render($ctx);
-        self::assertInstanceOf(Renderable::class, $result);
+        self::assertFalse($reflection->hasProperty('ui'));
+        self::assertNotContains('mount', self::publicMethodNames($reflection));
     }
 
     #[Test]
-    public function screenContextMountDelegatesToMountSystem(): void
+    public function screenContextDoesNotExposeUiOrMountAuthoring(): void
     {
         $scope = $this->createStub(\Phalanx\Scope\TaskScope::class);
         $navigator = $this->createStub(Navigator::class);
         $mount = new MountSystem($scope);
-        $ctx = new ScreenContext($scope, new Ui(), Theme::default(), $navigator, $mount);
+        $ctx = new ScreenContext($scope, Theme::default(), $navigator, $mount);
+        $reflection = new ReflectionClass($ctx);
 
-        $mounted = $ctx->mount(ContextTestComponent::class, label: 'Poseidon');
-
-        self::assertInstanceOf(MountedComponent::class, $mounted);
-    }
-}
-
-final class ContextTestComponent implements Component
-{
-    public function __construct(
-        private(set) string $label = 'default',
-    ) {
+        self::assertFalse($reflection->hasProperty('ui'));
+        self::assertNotContains('mount', self::publicMethodNames($reflection));
     }
 
-    public function __invoke(RenderContext $ctx): Renderable
+    /**
+     * @template T of object
+     * @param ReflectionClass<T> $reflection
+     * @return list<string>
+     */
+    private static function publicMethodNames(ReflectionClass $reflection): array
     {
-        return $ctx->ui->text($this->label);
+        return array_map(
+            static fn(ReflectionMethod $method): string => $method->getName(),
+            $reflection->getMethods(ReflectionMethod::IS_PUBLIC),
+        );
     }
 }

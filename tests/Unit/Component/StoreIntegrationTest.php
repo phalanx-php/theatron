@@ -15,7 +15,6 @@ use Phalanx\Theatron\Reactive\Tracker;
 use Phalanx\Theatron\State\Store;
 use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Renderable;
-use Phalanx\Theatron\Tdom\Ui;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -61,7 +60,7 @@ final class StoreIntegrationTest extends TestCase
 
         $scope = $this->createStub(\Phalanx\Scope\Scope::class);
         $mountSystem = new MountSystem($scope);
-        $ctx = new RenderContext($scope, new Ui(), Theme::default(), $mountSystem);
+        $ctx = new RenderContext($scope, Theme::default(), $mountSystem);
         $mounted->render($ctx);
 
         $mounted->dispose();
@@ -106,7 +105,7 @@ final class StoreIntegrationTest extends TestCase
 
         $scope = $this->createStub(\Phalanx\Scope\Scope::class);
         $mountSystem = new MountSystem($scope);
-        $ctx = new RenderContext($scope, new Ui(), Theme::default(), $mountSystem);
+        $ctx = new RenderContext($scope, Theme::default(), $mountSystem);
         $mounted->render($ctx);
         $mounted->dispose();
 
@@ -176,7 +175,7 @@ final class SpartanComponent implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text('Warriors: ' . $this->store->warriors->count);
+        return \Phalanx\Theatron\Ui\text('Warriors: ' . $this->store->warriors->count);
     }
 }
 
@@ -190,6 +189,6 @@ final class MixedComponent implements Component
 
     public function __invoke(RenderContext $ctx): Renderable
     {
-        return $ctx->ui->text($this->store->warriors->count . ' - ' . $this->morale->get());
+        return \Phalanx\Theatron\Ui\text($this->store->warriors->count . ' - ' . $this->morale->get());
     }
 }

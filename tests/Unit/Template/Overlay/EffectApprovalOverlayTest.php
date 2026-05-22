@@ -12,7 +12,6 @@ use Phalanx\Theatron\Tdom\Element\ColumnElement;
 use Phalanx\Theatron\Tdom\Element\DividerElement;
 use Phalanx\Theatron\Tdom\Element\PanelElement;
 use Phalanx\Theatron\Tdom\Element\TextElement;
-use Phalanx\Theatron\Tdom\Ui;
 use Phalanx\Theatron\Template\Overlay\EffectApprovalOverlay;
 use Phalanx\Theatron\Template\Slice\PendingEffect;
 use PHPUnit\Framework\Attributes\Test;
@@ -152,7 +151,7 @@ final class EffectApprovalOverlayTest extends TestCase
         $scope = $this->createStub(TaskScope::class);
         $mountSystem = new MountSystem($scope);
 
-        return new RenderContext($scope, new Ui(), Theme::default(), $mountSystem);
+        return new RenderContext($scope, Theme::default(), $mountSystem);
     }
 
     private function flattenText(mixed $element): string

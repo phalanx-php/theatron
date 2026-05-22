@@ -113,7 +113,7 @@ final class AppRenderDiagnosticsProbeScreen implements Screen
             $ctx->scope->cancellation()->cancel();
         }
 
-        return $ctx->ui->text('app diagnostics');
+        return \Phalanx\Theatron\Ui\text('app diagnostics');
     }
 }
 
@@ -135,6 +135,6 @@ final class StoreInstanceProbeScreen implements Screen
         self::$renderedStoreId = spl_object_id($this->store);
         $ctx->scope->cancellation()->cancel();
 
-        return $ctx->ui->text('store probe');
+        return \Phalanx\Theatron\Ui\text('store probe');
     }
 }

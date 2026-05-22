@@ -12,6 +12,8 @@ class ModeDispatcher
 {
     private(set) InputMode $mode = InputMode::Normal;
 
+    private ?string $focusTarget = null;
+
     /** @var ?Closure(InputMode, ?string): void */
     private ?Closure $onModeChange = null;
 
@@ -37,6 +39,11 @@ class ModeDispatcher
         }
 
         return $this->dispatchNormal($event);
+    }
+
+    public function syncModeWithActiveFocus(): void
+    {
+        $this->autoModeForActive();
     }
 
     private function dispatchNormal(KeyEvent $event): bool
@@ -119,10 +126,17 @@ class ModeDispatcher
 
     private function setMode(InputMode $mode): void
     {
+        $focusTarget = $this->focus->activeName();
+
+        if ($this->mode === $mode && $this->focusTarget === $focusTarget) {
+            return;
+        }
+
         $this->mode = $mode;
+        $this->focusTarget = $focusTarget;
 
         if ($this->onModeChange !== null) {
-            ($this->onModeChange)($mode, $this->focus->activeName());
+            ($this->onModeChange)($mode, $focusTarget);
         }
     }
 

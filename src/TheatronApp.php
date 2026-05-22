@@ -21,6 +21,7 @@ use Phalanx\Theatron\Context\ScreenContext;
 use Phalanx\Theatron\Contract\DeclaresBindings;
 use Phalanx\Theatron\Contract\HasFocusables;
 use Phalanx\Theatron\Contract\HasStatusBar;
+use Phalanx\Theatron\Contract\RefreshesPeriodically;
 use Phalanx\Theatron\Contract\Screen;
 use Phalanx\Theatron\Focus\FocusManager;
 use Phalanx\Theatron\Input\InputEvent;
@@ -120,6 +121,10 @@ final class TheatronApp
         }
 
         self::rebuildFocus($focus, $navigator);
+        $dispatcher->syncModeWithActiveFocus();
+
+        $lastActivityPulseAt = 0.0;
+        $lastScreenRefreshAt = 0.0;
 
         $this->stage->onDraw(static function () use (
             $mountSystem,
@@ -129,12 +134,28 @@ final class TheatronApp
             $renderCtx,
             $statusMountOwner,
             $store,
+            &$lastActivityPulseAt,
+            &$lastScreenRefreshAt,
         ): void {
+            $workspace = $navigator->activeWorkspace();
+            $now = microtime(true);
+
             if ($store instanceof AppStore) {
                 EffectApprovalReactor::check($store, $navigator);
+
+                if ($store->activity->isBusy() && $now - $lastActivityPulseAt >= 0.25) {
+                    $store->activity = $store->activity->tick();
+                    $workspace->markDirty();
+                    $lastActivityPulseAt = $now;
+                }
             }
 
-            $workspace = $navigator->activeWorkspace();
+            $refreshInterval = self::refreshIntervalSeconds($workspace->screen);
+            if ($refreshInterval !== null && $now - $lastScreenRefreshAt >= $refreshInterval) {
+                $workspace->markDirty();
+                $lastScreenRefreshAt = $now;
+            }
+
             $statusIsDirty = $mountSystem->hasDirtyOwnedSlots($statusMountOwner);
             $overlays = $navigator->overlays();
             $topOverlay = $overlays !== [] ? $overlays[array_key_last($overlays)] : null;
@@ -179,8 +200,9 @@ final class TheatronApp
             }
         });
 
+        $stage = $this->stage;
         $this->stage->onInput(
-            static function (InputEvent $event) use ($registry, $navigator, $scope, $focus, $dispatcher): void {
+            static function (InputEvent $event) use ($registry, $navigator, $scope, $focus, $dispatcher, $stage): void {
                 if (!$event instanceof KeyEvent) {
                     return;
                 }
@@ -192,6 +214,8 @@ final class TheatronApp
                     $topOverlay?->component instanceof NormalModeHandler
                     && $topOverlay->component->handleNormalKey($event)
                 ) {
+                    $stage->requestFrame();
+
                     return;
                 }
 
@@ -202,6 +226,7 @@ final class TheatronApp
 
                     if ($action !== null) {
                         if ($action->isQuit()) {
+                            $stage->requestFrame();
                             $scope->cancellation()->cancel();
 
                             return;
@@ -214,6 +239,8 @@ final class TheatronApp
                             $registry->activateScreen($target);
                             self::rebuildBindings($registry, $navigator);
                             self::rebuildFocus($focus, $navigator);
+                            $dispatcher->syncModeWithActiveFocus();
+                            $stage->requestFrame();
 
                             return;
                         }
@@ -223,6 +250,8 @@ final class TheatronApp
                                 $registry->activateScreen($navigator->active());
                                 self::rebuildBindings($registry, $navigator);
                                 self::rebuildFocus($focus, $navigator);
+                                $dispatcher->syncModeWithActiveFocus();
+                                $stage->requestFrame();
                             }
 
                             return;
@@ -230,6 +259,7 @@ final class TheatronApp
 
                         if ($action->isAction() && $action->callback !== null) {
                             ($action->callback)();
+                            $stage->requestFrame();
 
                             return;
                         }
@@ -243,6 +273,7 @@ final class TheatronApp
                             } else {
                                 $navigator->overlay($target);
                             }
+                            $stage->requestFrame();
 
                             return;
                         }
@@ -251,12 +282,18 @@ final class TheatronApp
 
                 $activeBeforeDispatch = $navigator->active();
 
-                $dispatcher->dispatch($event);
+                $handled = $dispatcher->dispatch($event);
+
+                if ($handled) {
+                    $stage->requestFrame();
+                }
 
                 if ($navigator->active() !== $activeBeforeDispatch) {
                     $registry->activateScreen($navigator->active());
                     self::rebuildBindings($registry, $navigator);
                     self::rebuildFocus($focus, $navigator);
+                    $dispatcher->syncModeWithActiveFocus();
+                    $stage->requestFrame();
                 }
             },
         );
@@ -309,6 +346,17 @@ final class TheatronApp
         if ($screen instanceof DeclaresBindings) {
             $registry->setScreen($screen::class, $screen->bindings());
         }
+    }
+
+    private static function refreshIntervalSeconds(Screen $screen): ?float
+    {
+        if (!$screen instanceof RefreshesPeriodically) {
+            return null;
+        }
+
+        $interval = $screen->refreshIntervalSeconds();
+
+        return $interval !== null && $interval > 0 ? $interval : null;
     }
 
     private static function paintRegion(

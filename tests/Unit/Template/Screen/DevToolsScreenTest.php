@@ -141,6 +141,35 @@ final class DevToolsScreenTest extends TestCase
     }
 
     #[Test]
+    public function liveInspectionTabsOptIntoPeriodicRefresh(): void
+    {
+        $store = new AppStore();
+        $screen = new DevToolsScreen(
+            $store,
+            new MountSystem($this->createStub(TaskScope::class)),
+            new RecordingNavigator(),
+        );
+
+        self::assertSame(0.25, $screen->refreshIntervalSeconds());
+
+        $store->devtools = $store->devtools->nextTab();
+        self::assertSame(DevToolsTab::Requests, $store->devtools->activeTab);
+        self::assertNull($screen->refreshIntervalSeconds());
+
+        $store->devtools = $store->devtools->nextTab();
+        self::assertSame(DevToolsTab::Signals, $store->devtools->activeTab);
+        self::assertSame(0.25, $screen->refreshIntervalSeconds());
+
+        $store->devtools = $store->devtools->nextTab();
+        self::assertSame(DevToolsTab::Tree, $store->devtools->activeTab);
+        self::assertSame(0.25, $screen->refreshIntervalSeconds());
+
+        $store->devtools = $store->devtools->nextTab();
+        self::assertSame(DevToolsTab::Store, $store->devtools->activeTab);
+        self::assertNull($screen->refreshIntervalSeconds());
+    }
+
+    #[Test]
     public function signalsTabShowsEmptyStateWhenRegistryDisabled(): void
     {
         $store = new AppStore();

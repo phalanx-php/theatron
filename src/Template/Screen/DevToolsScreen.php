@@ -12,6 +12,7 @@ use Phalanx\Theatron\Contract\DeclaresBindings;
 use Phalanx\Theatron\Contract\Focusable;
 use Phalanx\Theatron\Contract\HasFocusables;
 use Phalanx\Theatron\Contract\HasStatusBar;
+use Phalanx\Theatron\Contract\RefreshesPeriodically;
 use Phalanx\Theatron\Contract\Screen;
 use Phalanx\Theatron\Input\Key;
 use Phalanx\Theatron\Input\KeyEvent;
@@ -35,7 +36,13 @@ use function Phalanx\Theatron\Ui\column;
 use function Phalanx\Theatron\Ui\row;
 use function Phalanx\Theatron\Ui\text;
 
-class DevToolsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBindings, NormalModeHandler
+class DevToolsScreen implements
+    Screen,
+    HasStatusBar,
+    HasFocusables,
+    DeclaresBindings,
+    NormalModeHandler,
+    RefreshesPeriodically
 {
     public function __construct(
         private(set) AppStore $store,
@@ -140,6 +147,14 @@ class DevToolsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBin
         }
 
         return false;
+    }
+
+    public function refreshIntervalSeconds(): ?float
+    {
+        return match ($this->store->devtools->activeTab) {
+            DevToolsTab::Metrics, DevToolsTab::Signals, DevToolsTab::Tree => 0.25,
+            default => null,
+        };
     }
 
     private static function requestRow(LlmRequestEntry $entry, bool $focused): Renderable

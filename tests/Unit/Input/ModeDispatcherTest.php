@@ -27,6 +27,36 @@ final class ModeDispatcherTest extends TestCase
     }
 
     #[Test]
+    public function syncModeWithActiveInputFocusEntersInsertMode(): void
+    {
+        $focus = new FocusManager();
+        $focus->register('input', new class () implements Focusable, AcceptsInput {
+            public function handleInput(KeyEvent $event): bool
+            {
+                return true;
+            }
+        });
+
+        $dispatcher = new ModeDispatcher($focus);
+        $dispatcher->syncModeWithActiveFocus();
+
+        self::assertSame(InputMode::Insert, $dispatcher->mode);
+    }
+
+    #[Test]
+    public function syncModeWithPlainFocusStaysNormalMode(): void
+    {
+        $focus = new FocusManager();
+        $focus->register('plain', new class () implements Focusable {
+        });
+
+        $dispatcher = new ModeDispatcher($focus);
+        $dispatcher->syncModeWithActiveFocus();
+
+        self::assertSame(InputMode::Normal, $dispatcher->mode);
+    }
+
+    #[Test]
     public function tabCyclesFocusInNormalMode(): void
     {
         $focus = new FocusManager();

@@ -7,17 +7,17 @@ namespace Phalanx\Theatron\Tests\Unit;
 use Phalanx\Boot\AppContext;
 use Phalanx\Service\ServiceCatalog;
 use Phalanx\Theatron\Binding\BindingRegistry;
+use Phalanx\Theatron\Context\ScreenContext;
+use Phalanx\Theatron\Contract\Screen;
 use Phalanx\Theatron\Stage\Stage;
 use Phalanx\Theatron\Stage\StageConfig;
 use Phalanx\Theatron\State\Store;
 use Phalanx\Theatron\Styling\Theme;
+use Phalanx\Theatron\Tdom\Renderable;
+use Phalanx\Theatron\TheatronApp;
 use Phalanx\Theatron\TheatronServiceBundle;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-
-// ---------------------------------------------------------------------------
-// Fixtures
-// ---------------------------------------------------------------------------
 
 final class ApolloStore extends Store
 {
@@ -26,37 +26,52 @@ final class ApolloStore extends Store
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 final class TheatronServiceBundleTest extends TestCase
 {
     #[Test]
     public function registersStageAsSingleton(): void
     {
         $catalog = new ServiceCatalog(new AppContext());
-        $bundle = new TheatronServiceBundle();
+        $app = $this->app();
+        $bundle = new TheatronServiceBundle($app);
         $bundle->services($catalog, new AppContext());
 
         self::assertTrue($catalog->has(Stage::class));
     }
 
     #[Test]
-    public function registersStageConfigAsSingleton(): void
+    public function registersProvidedStageInstance(): void
     {
         $catalog = new ServiceCatalog(new AppContext());
-        $bundle = new TheatronServiceBundle();
+        $app = $this->app();
+        $bundle = new TheatronServiceBundle($app);
         $bundle->services($catalog, new AppContext());
 
-        self::assertTrue($catalog->has(StageConfig::class));
+        $factory = $catalog->compile()->resolve(Stage::class)->factoryFn;
+        self::assertNotNull($factory);
+
+        self::assertSame($app->stage, $factory());
+    }
+
+    #[Test]
+    public function registersAppStageConfigAsSingleton(): void
+    {
+        $catalog = new ServiceCatalog(new AppContext());
+        $app = $this->app();
+        $bundle = new TheatronServiceBundle($app);
+        $bundle->services($catalog, new AppContext());
+
+        $factory = $catalog->compile()->resolve(StageConfig::class)->factoryFn;
+        self::assertNotNull($factory);
+
+        self::assertSame($app->stage->config, $factory());
     }
 
     #[Test]
     public function registersBindingRegistryAsSingleton(): void
     {
         $catalog = new ServiceCatalog(new AppContext());
-        $bundle = new TheatronServiceBundle();
+        $bundle = new TheatronServiceBundle($this->app());
         $bundle->services($catalog, new AppContext());
 
         self::assertTrue($catalog->has(BindingRegistry::class));
@@ -66,7 +81,7 @@ final class TheatronServiceBundleTest extends TestCase
     public function registersThemeAsSingleton(): void
     {
         $catalog = new ServiceCatalog(new AppContext());
-        $bundle = new TheatronServiceBundle();
+        $bundle = new TheatronServiceBundle($this->app());
         $bundle->services($catalog, new AppContext());
 
         self::assertTrue($catalog->has(Theme::class));
@@ -76,7 +91,7 @@ final class TheatronServiceBundleTest extends TestCase
     public function doesNotRegisterStoreWhenNotConfigured(): void
     {
         $catalog = new ServiceCatalog(new AppContext());
-        $bundle = new TheatronServiceBundle();
+        $bundle = new TheatronServiceBundle($this->app());
         $bundle->services($catalog, new AppContext());
 
         self::assertFalse($catalog->has(ApolloStore::class));
@@ -86,7 +101,7 @@ final class TheatronServiceBundleTest extends TestCase
     public function registersStoreWhenConfigured(): void
     {
         $catalog = new ServiceCatalog(new AppContext());
-        $bundle = new TheatronServiceBundle(storeClass: ApolloStore::class);
+        $bundle = new TheatronServiceBundle($this->app(storeClass: ApolloStore::class));
         $bundle->services($catalog, new AppContext());
 
         self::assertTrue($catalog->has(ApolloStore::class));
@@ -96,36 +111,64 @@ final class TheatronServiceBundleTest extends TestCase
     public function aliasesStoreBaseClassToConfiguredStore(): void
     {
         $catalog = new ServiceCatalog(new AppContext());
-        $bundle = new TheatronServiceBundle(storeClass: ApolloStore::class);
+        $bundle = new TheatronServiceBundle($this->app(storeClass: ApolloStore::class));
         $bundle->services($catalog, new AppContext());
 
         self::assertSame(ApolloStore::class, $catalog->compile()->alias(Store::class));
     }
 
     #[Test]
-    public function storeClassIsStoredOnBundle(): void
+    public function appIsStoredOnBundle(): void
     {
-        $bundle = new TheatronServiceBundle(storeClass: ApolloStore::class);
+        $app = $this->app(storeClass: ApolloStore::class);
+        $bundle = new TheatronServiceBundle($app);
 
-        self::assertSame(ApolloStore::class, $bundle->storeClass);
+        self::assertSame($app, $bundle->app);
     }
 
     #[Test]
-    public function customStageConfigIsStoredOnBundle(): void
-    {
-        $config = new StageConfig(handleInput: false);
-        $bundle = new TheatronServiceBundle(stageConfig: $config);
-
-        self::assertFalse($bundle->stageConfig->handleInput);
-    }
-
-    #[Test]
-    public function nullThemeDefaultsToThemeDefault(): void
+    public function registersAppTheme(): void
     {
         $catalog = new ServiceCatalog(new AppContext());
-        $bundle = new TheatronServiceBundle(theme: null);
+        $theme = Theme::default();
+        $app = $this->app(theme: $theme);
+        $bundle = new TheatronServiceBundle($app);
         $bundle->services($catalog, new AppContext());
 
-        self::assertTrue($catalog->has(Theme::class));
+        $factory = $catalog->compile()->resolve(Theme::class)->factoryFn;
+        self::assertNotNull($factory);
+
+        self::assertSame($theme, $factory());
+    }
+
+    /** @param class-string<Store>|null $storeClass */
+    private function app(?string $storeClass = null, ?Theme $theme = null): TheatronApp
+    {
+        $stream = fopen('php://memory', 'w+');
+        self::assertIsResource($stream);
+
+        return new TheatronApp(
+            Stage::boot(new StageConfig(
+                handleInput: false,
+                stream: $stream,
+                env: [
+                    'COLUMNS' => '20',
+                    'LINES' => '5',
+                ],
+            )),
+            $theme ?? Theme::default(),
+            [TheatronServiceBundleProbeScreen::class],
+            [],
+            $storeClass,
+            false,
+        );
+    }
+}
+
+final class TheatronServiceBundleProbeScreen implements Screen
+{
+    public function __invoke(ScreenContext $ctx): Renderable
+    {
+        return $ctx->ui->text('service bundle probe');
     }
 }

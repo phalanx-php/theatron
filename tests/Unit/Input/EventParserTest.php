@@ -101,6 +101,49 @@ final class EventParserTest extends TestCase
     }
 
     #[Test]
+    public function splitBracketedPasteBuffersUntilEndMarker(): void
+    {
+        self::assertSame([], $this->parser->parse("\033[200~hello "));
+        self::assertTrue($this->parser->hasPending());
+
+        $events = $this->parser->parse("world\033[201~");
+
+        self::assertCount(1, $events);
+        self::assertInstanceOf(PasteEvent::class, $events[0]);
+        self::assertSame("hello world", $events[0]->content);
+        self::assertFalse($this->parser->hasPending());
+    }
+
+    #[Test]
+    public function splitBracketedPasteStartSequenceIsBuffered(): void
+    {
+        self::assertSame([], $this->parser->parse("\033[200"));
+        self::assertTrue($this->parser->hasPending());
+
+        self::assertSame([], $this->parser->parse("~hello"));
+        self::assertTrue($this->parser->hasPending());
+
+        $events = $this->parser->parse("\033[201~");
+
+        self::assertCount(1, $events);
+        self::assertInstanceOf(PasteEvent::class, $events[0]);
+        self::assertSame("hello", $events[0]->content);
+        self::assertFalse($this->parser->hasPending());
+    }
+
+    #[Test]
+    public function trailingInputAfterBracketedPasteIsParsed(): void
+    {
+        $events = $this->parser->parse("\033[200~hello\033[201~x");
+
+        self::assertCount(2, $events);
+        self::assertInstanceOf(PasteEvent::class, $events[0]);
+        self::assertSame("hello", $events[0]->content);
+        self::assertInstanceOf(KeyEvent::class, $events[1]);
+        self::assertTrue($events[1]->is("x"));
+    }
+
+    #[Test]
     public function mouseSgrPress(): void
     {
         $events = $this->parser->parse("\033[<0;10;5M");

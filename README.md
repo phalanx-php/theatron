@@ -33,14 +33,13 @@ php demos/full.php
 
 ## Current App Shape
 
-Configure the UI with `Theatron::app()`, then start it with
-`Theatron::starting()`. Runtime bundles are registered directly in the
-bootstrap file.
+Configure and start the app with `Theatron::app()`. External runtime bundles are
+registered directly on the same builder.
 
 ```php
 use Phalanx\Theatron\Binding\Binding;
-use Phalanx\Theatron\Stage\StageConfig;
 use Phalanx\Theatron\Theatron;
+use Phalanx\Theatron\TheatronApp;
 use Phalanx\Theatron\TheatronServiceBundle;
 use Phalanx\Theatron\Template\AppStore;
 use Phalanx\Theatron\Template\Screen\ChatScreen;
@@ -52,9 +51,8 @@ $screens = [
     DevToolsScreen::class,
     SettingsScreen::class,
 ];
-$stageConfig = new StageConfig();
 
-$app = Theatron::app($context)
+return Theatron::app($context)
     ->store(AppStore::class)
     ->screens($screens)
     ->globalBindings([
@@ -62,23 +60,16 @@ $app = Theatron::app($context)
         Binding::ctrl('d')->workspace(DevToolsScreen::class)->label('devtools'),
         Binding::ctrl('s')->workspace(SettingsScreen::class)->label('settings'),
     ])
-    ->stageConfig($stageConfig)
-    ->devtools()
-    ->build();
-
-return Theatron::starting($context)
     ->providers(
-        new TheatronServiceBundle(
-            storeClass: AppStore::class,
-            stageConfig: $stageConfig,
-        ),
+        static fn(TheatronApp $app): TheatronServiceBundle => new TheatronServiceBundle($app),
     )
-    ->run($app);
+    ->devtools()
+    ->run();
 ```
 
-`Theatron::starting(...)` is the app runtime entry point. Keep service bundles
-visible in the bootstrap instead of hiding them behind builder convenience
-methods.
+`Theatron::app(...)` owns the Theatron app configuration and Aegis startup path.
+Runtime bundles are declared in the bootstrap. The Theatron bundle receives the
+built app, so it registers the same stage/store instances the renderer uses.
 
 ## Components
 

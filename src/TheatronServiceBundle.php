@@ -16,27 +16,23 @@ use Phalanx\Theatron\Styling\Theme;
 
 final class TheatronServiceBundle extends ServiceBundle
 {
-    /** @param class-string<Store>|null $storeClass */
-    public function __construct(
-        private(set) ?string $storeClass = null,
-        private(set) StageConfig $stageConfig = new StageConfig(),
-        private(set) ?Theme $theme = null,
-    ) {
+    public function __construct(private(set) TheatronApp $app)
+    {
     }
 
     public function services(Services $services, AppContext $context): void
     {
-        $config = $this->stageConfig;
-        $theme = $this->theme ?? Theme::default();
+        $stage = $this->app->stage;
+        $theme = $this->app->theme;
 
         $services->singleton(ConsoleInput::class)
             ->factory(static fn(): ConsoleInput => new ConsoleInput());
 
         $services->singleton(StageConfig::class)
-            ->factory(static fn(): StageConfig => $config);
+            ->factory(static fn(): StageConfig => $stage->config);
 
         $services->singleton(Stage::class)
-            ->factory(static fn(): Stage => Stage::boot($config));
+            ->factory(static fn(): Stage => $stage);
 
         $services->singleton(BindingRegistry::class)
             ->factory(static fn(): BindingRegistry => new BindingRegistry());
@@ -44,8 +40,8 @@ final class TheatronServiceBundle extends ServiceBundle
         $services->singleton(Theme::class)
             ->factory(static fn(): Theme => $theme);
 
-        if ($this->storeClass !== null) {
-            $storeClass = $this->storeClass;
+        if ($this->app->storeClass !== null) {
+            $storeClass = $this->app->storeClass;
             $services->singleton($storeClass)
                 ->factory(static fn(): Store => new $storeClass());
             $services->alias(Store::class, $storeClass);

@@ -71,7 +71,8 @@
         "phalanx-php/surreal": "dev-main as 0.6.0",
         "phalanx-php/styx": "dev-main as 0.6.0",
         "league/commonmark": "^2.7",
-        "symfony/runtime": "^7.0"
+        "symfony/runtime": "^7.0",
+        "symfony/dotenv": "^7.0"
     },
     "bin": ["bin/theatron"],
     "autoload": {

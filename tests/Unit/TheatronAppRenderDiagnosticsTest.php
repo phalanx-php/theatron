@@ -90,8 +90,7 @@ final class TheatronAppRenderDiagnosticsTest extends PhalanxTestCase
             false,
         );
         $testApp = $this->testApp([], new TheatronServiceBundle(
-            storeClass: StoreInstanceProbeStore::class,
-            stageConfig: $stageConfig,
+            $app,
         ));
 
         $testApp->application->scoped(static function (ExecutionScope $scope) use ($app): void {

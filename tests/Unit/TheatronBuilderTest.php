@@ -12,14 +12,17 @@ use Phalanx\Theatron\Binding\Binding;
 use Phalanx\Theatron\Context\ScreenContext;
 use Phalanx\Theatron\Contract\Screen;
 use Phalanx\Theatron\Reactive\SignalRegistry;
+use Phalanx\Theatron\Stage\ScreenMode;
+use Phalanx\Theatron\Stage\StageConfig;
 use Phalanx\Theatron\State\Store;
 use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Theatron;
 use Phalanx\Theatron\TheatronApp;
 use Phalanx\Theatron\TheatronBuilder;
-use Phalanx\Theatron\TheatronRuntimeBuilder;
+use Phalanx\Theatron\TheatronServiceBundle;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use ReflectionMethod;
 
 final class OlympusScreen implements Screen
 {
@@ -62,20 +65,6 @@ final class TheatronBuilderTest extends TestCase
     }
 
     #[Test]
-    public function startingReturnsRuntimeBuilder(): void
-    {
-        self::assertInstanceOf(TheatronRuntimeBuilder::class, Theatron::starting([]));
-    }
-
-    #[Test]
-    public function runtimeBuilderAcceptsProvidersDirectly(): void
-    {
-        $runtime = Theatron::starting([]);
-
-        self::assertSame($runtime, $runtime->providers(new AresBundle()));
-    }
-
-    #[Test]
     public function builderHoldsContext(): void
     {
         $builder = Theatron::app(['APP_ENV' => 'test']);
@@ -109,6 +98,32 @@ final class TheatronBuilderTest extends TestCase
             ->build();
 
         self::assertInstanceOf(TheatronApp::class, $app);
+    }
+
+    #[Test]
+    public function customStageConfigIsAppliedToBuiltApp(): void
+    {
+        $stream = fopen('php://memory', 'w+');
+        self::assertIsResource($stream);
+
+        $config = new StageConfig(
+            screenMode: ScreenMode::Inline,
+            handleInput: false,
+            stream: $stream,
+            env: [
+                'COLUMNS' => '24',
+                'LINES' => '8',
+            ],
+        );
+
+        $app = Theatron::app()
+            ->screens([OlympusScreen::class])
+            ->stageConfig($config)
+            ->build();
+
+        self::assertSame($config, $app->stage->config);
+        self::assertSame(24, $app->stage->width());
+        self::assertSame(8, $app->stage->height());
     }
 
     #[Test]
@@ -255,6 +270,40 @@ final class TheatronBuilderTest extends TestCase
             ->globalBindings([$binding]);
 
         self::assertSame([$binding], $builder->registeredGlobalBindings());
+    }
+
+    #[Test]
+    public function providersAreRegisteredOnTheAppBuilder(): void
+    {
+        $bundle = new AresBundle();
+        $builder = Theatron::app()
+            ->screens([OlympusScreen::class])
+            ->providers($bundle);
+
+        self::assertSame([$bundle], $builder->registeredProviders());
+    }
+
+    #[Test]
+    public function providerFactoriesAreResolvedAgainstBuiltApp(): void
+    {
+        $received = null;
+        $builder = Theatron::app()
+            ->screens([OlympusScreen::class])
+            ->providers(
+                static function (TheatronApp $app) use (&$received): TheatronServiceBundle {
+                    $received = $app;
+
+                    return new TheatronServiceBundle($app);
+                },
+            );
+        $app = $builder->build();
+        $method = new ReflectionMethod($builder, 'resolvedProviders');
+        $providers = $method->invoke($builder, $app);
+
+        self::assertIsArray($providers);
+        self::assertCount(1, $providers);
+        self::assertInstanceOf(TheatronServiceBundle::class, $providers[0]);
+        self::assertSame($app, $received);
     }
 
     #[Test]

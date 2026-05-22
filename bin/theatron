@@ -6,46 +6,36 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/vendor/autoload_runtime.php';
 
 use Phalanx\Theatron\Binding\Binding;
-use Phalanx\Theatron\Stage\StageConfig;
-use Phalanx\Theatron\Theatron;
-use Phalanx\Theatron\TheatronServiceBundle;
 use Phalanx\Theatron\Template\AppStore;
 use Phalanx\Theatron\Template\Screen\AgentBoardScreen;
 use Phalanx\Theatron\Template\Screen\ChatScreen;
 use Phalanx\Theatron\Template\Screen\DevToolsScreen;
 use Phalanx\Theatron\Template\Screen\LlmRequestDetailScreen;
 use Phalanx\Theatron\Template\Screen\SettingsScreen;
+use Phalanx\Theatron\Theatron;
+use Phalanx\Theatron\TheatronApp;
+use Phalanx\Theatron\TheatronServiceBundle;
 
 return static function (array $context): \Closure {
     return static function () use ($context): int {
-        $screens = [
-            ChatScreen::class,
-            AgentBoardScreen::class,
-            DevToolsScreen::class,
-            LlmRequestDetailScreen::class,
-            SettingsScreen::class,
-        ];
-        $stageConfig = new StageConfig();
-
-        $builder = Theatron::app($context)
+        return Theatron::app($context)
             ->store(AppStore::class)
-            ->screens($screens)
+            ->screens([
+                ChatScreen::class,
+                AgentBoardScreen::class,
+                DevToolsScreen::class,
+                LlmRequestDetailScreen::class,
+                SettingsScreen::class,
+            ])
             ->globalBindings([
                 Binding::ctrl('c')->quit()->label('quit'),
                 Binding::ctrl('d')->workspace(DevToolsScreen::class)->label('devtools'),
                 Binding::ctrl('s')->workspace(SettingsScreen::class)->label('settings'),
             ])
-            ->stageConfig($stageConfig)
-            ->devtools();
-        $theatronApp = $builder->build();
-
-        return Theatron::starting($context)
             ->providers(
-                new TheatronServiceBundle(
-                    storeClass: AppStore::class,
-                    stageConfig: $stageConfig,
-                ),
+                static fn(TheatronApp $app): TheatronServiceBundle => new TheatronServiceBundle($app),
             )
-            ->run($theatronApp);
+            ->devtools()
+            ->run();
     };
 };

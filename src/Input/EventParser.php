@@ -72,7 +72,7 @@ final class EventParser
 
     public function hasPending(): bool
     {
-        return $this->buffer !== '';
+        return $this->buffer !== '' || $this->inPaste || $this->pasteBuffer !== '';
     }
 
     /** @return list<InputEvent> */

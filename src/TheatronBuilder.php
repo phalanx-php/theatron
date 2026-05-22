@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 namespace Phalanx\Theatron;
 
+use Closure;
 use InvalidArgumentException;
+use Phalanx\Application;
 use Phalanx\Boot\AppContext;
+use Phalanx\Scope\ExecutionScope;
+use Phalanx\Service\ServiceBundle;
 use Phalanx\Theatron\Binding\Binding;
 use Phalanx\Theatron\Contract\Screen;
 use Phalanx\Theatron\Reactive\SignalRegistry;
@@ -21,6 +25,9 @@ final class TheatronBuilder
 
     /** @var list<Binding> */
     private array $globalBindings = [];
+
+    /** @var list<ServiceBundle|Closure(TheatronApp): ServiceBundle> */
+    private array $providers = [];
 
     /** @var class-string<Store>|null */
     private ?string $storeClass = null;
@@ -85,6 +92,14 @@ final class TheatronBuilder
         return $this;
     }
 
+    /** @param ServiceBundle|Closure(TheatronApp): ServiceBundle ...$providers */
+    public function providers(ServiceBundle|Closure ...$providers): self
+    {
+        $this->providers = [...$this->providers, ...array_values($providers)];
+
+        return $this;
+    }
+
     public function build(): TheatronApp
     {
         if ($this->screens === []) {
@@ -107,6 +122,19 @@ final class TheatronBuilder
         );
     }
 
+    public function run(): int
+    {
+        $app = $this->build();
+
+        Application::starting($this->context->values)
+            ->providers(...$this->resolvedProviders($app))
+            ->run(static function (ExecutionScope $scope) use ($app): void {
+                $app->start($scope);
+            });
+
+        return 0;
+    }
+
     /** @return class-string<Store>|null */
     public function registeredStore(): ?string
     {
@@ -123,5 +151,22 @@ final class TheatronBuilder
     public function registeredGlobalBindings(): array
     {
         return $this->globalBindings;
+    }
+
+    /** @return list<ServiceBundle|Closure(TheatronApp): ServiceBundle> */
+    public function registeredProviders(): array
+    {
+        return $this->providers;
+    }
+
+    /** @return list<ServiceBundle> */
+    private function resolvedProviders(TheatronApp $app): array
+    {
+        return array_map(
+            static fn(ServiceBundle|Closure $provider): ServiceBundle => $provider instanceof Closure
+                ? $provider($app)
+                : $provider,
+            $this->providers,
+        );
     }
 }

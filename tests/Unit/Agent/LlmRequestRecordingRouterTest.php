@@ -59,6 +59,7 @@ final class LlmRequestRecordingRouterTest extends TestCase
         self::assertSame('POST', $entry->method);
         self::assertSame('/api/chat', $entry->path);
         self::assertSame('{"model":"demo"}', $entry->requestBody);
+        self::assertSame('inv.apollo', $entry->invocationId);
         self::assertTrue($entry->complete);
     }
 
@@ -81,7 +82,12 @@ final class LlmRequestRecordingRouterTest extends TestCase
         $transport = LlmRequestRecordingTransport::wrap(new RouterScriptedTransport(['{}']), $store);
         $provider = new RecordingProvider($transport);
 
-        $decorated = LlmRequestRecordingRouter::decorateProvider($provider, $store);
+        $router = new LlmRequestRecordingRouter(new StaticRouter($provider));
+        $decorated = $router->route(
+            new ServiceScope([AppStore::class => $store]),
+            self::agent(),
+            self::invocation(),
+        );
 
         self::assertInstanceOf(RecordingProvider::class, $decorated);
         self::assertSame($transport, $decorated->transport);

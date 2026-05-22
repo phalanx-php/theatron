@@ -282,21 +282,39 @@ final class StreamReactorTest extends TestCase
     }
 
     #[Test]
-    public function finalUsageRefreshesFocusedRequestTokenCount(): void
+    public function finalUsageRefreshesMatchingRequestTokenCount(): void
+    {
+        $store = new AppStore();
+        $store->requests = $store->requests
+            ->append(new LlmRequestEntry('req-1', 'POST', '/first', invocationId: 'inv-1'))
+            ->append(new LlmRequestEntry('req-2', 'POST', '/second', invocationId: 'inv-2'))
+            ->completeById('req-2', 200, 25.0, 0, '{}')
+            ->focusUp();
+        $at = new DateTimeImmutable();
+
+        StreamReactor::consume([
+            new FinalUsage('cue_1', 1, 'act_plato', 'inv-2', null, $at, 150, 300),
+        ], $store);
+
+        self::assertSame(0, $store->requests->focusedIndex);
+        self::assertNull($store->requests->entries[0]->tokenCount);
+        self::assertSame(450, $store->requests->entries[1]->tokenCount);
+    }
+
+    #[Test]
+    public function finalUsageWithoutInvocationDoesNotMutateFocusedRequest(): void
     {
         $store = new AppStore();
         $store->requests = $store->requests
             ->append(new LlmRequestEntry('req-1', 'POST', '/first'))
-            ->append(new LlmRequestEntry('req-2', 'POST', '/second'))
-            ->completeById('req-2', 200, 25.0, 0, '{}');
+            ->completeById('req-1', 200, 25.0, 0, '{}');
         $at = new DateTimeImmutable();
 
         StreamReactor::consume([
             new FinalUsage('cue_1', 1, 'act_plato', null, null, $at, 150, 300),
         ], $store);
 
-        self::assertSame(450, $store->requests->focused()?->tokenCount);
-        self::assertSame(null, $store->requests->entries[0]->tokenCount);
+        self::assertSame(0, $store->requests->focused()?->tokenCount);
     }
 
     #[Test]

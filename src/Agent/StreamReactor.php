@@ -108,6 +108,12 @@ final class StreamReactor
     private static function onFinalUsage(FinalUsage $cue, AppStore $store): void
     {
         $store->activity = $store->activity->withUsage($cue->inputTokens, $cue->outputTokens);
-        $store->requests = $store->requests->updateFocusedTokenCount($store->activity->totalTokens);
+
+        if ($cue->invocationId !== null) {
+            $store->requests = $store->requests->updateTokenCountByInvocationId(
+                $cue->invocationId,
+                $store->activity->totalTokens,
+            );
+        }
     }
 }

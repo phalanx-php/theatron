@@ -18,6 +18,7 @@ class LlmRequestEntry
         private(set) float $startTime = 0.0,
         private(set) bool $complete = false,
         private(set) ?string $error = null,
+        private(set) ?string $invocationId = null,
     ) {
     }
 
@@ -39,6 +40,7 @@ class LlmRequestEntry
             startTime: $this->startTime,
             complete: true,
             error: null,
+            invocationId: $this->invocationId,
         );
     }
 
@@ -56,6 +58,25 @@ class LlmRequestEntry
             startTime: $this->startTime,
             complete: true,
             error: $error,
+            invocationId: $this->invocationId,
+        );
+    }
+
+    public function withResponseBody(string $responseBody): self
+    {
+        return new self(
+            requestId: $this->requestId,
+            method: $this->method,
+            path: $this->path,
+            status: $this->status,
+            elapsedMs: $this->elapsedMs,
+            tokenCount: $this->tokenCount,
+            requestBody: $this->requestBody,
+            responseBody: $responseBody,
+            startTime: $this->startTime,
+            complete: $this->complete,
+            error: $this->error,
+            invocationId: $this->invocationId,
         );
     }
 
@@ -73,6 +94,7 @@ class LlmRequestEntry
             startTime: $this->startTime,
             complete: $this->complete,
             error: $this->error,
+            invocationId: $this->invocationId,
         );
     }
 }

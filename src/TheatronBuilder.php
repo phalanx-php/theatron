@@ -6,7 +6,6 @@ namespace Phalanx\Theatron;
 
 use InvalidArgumentException;
 use Phalanx\Boot\AppContext;
-use Phalanx\Service\ServiceBundle;
 use Phalanx\Theatron\Binding\Binding;
 use Phalanx\Theatron\Contract\Screen;
 use Phalanx\Theatron\Reactive\SignalRegistry;
@@ -23,9 +22,6 @@ final class TheatronBuilder
     /** @var list<Binding> */
     private array $globalBindings = [];
 
-    /** @var list<ServiceBundle> */
-    private array $bundles = [];
-
     /** @var class-string<Store>|null */
     private ?string $storeClass = null;
 
@@ -39,9 +35,6 @@ final class TheatronBuilder
     {
         $this->stageConfig = new StageConfig(handleInput: true);
     }
-
-    // -------------------------------------------------------------------------
-    // Configuration
 
     /** @param class-string<Store> $store */
     public function store(string $store): self
@@ -92,16 +85,6 @@ final class TheatronBuilder
         return $this;
     }
 
-    public function services(ServiceBundle ...$bundles): self
-    {
-        $this->bundles = [...$this->bundles, ...array_values($bundles)];
-
-        return $this;
-    }
-
-    // -------------------------------------------------------------------------
-    // Assembly
-
     public function build(): TheatronApp
     {
         if ($this->screens === []) {
@@ -124,9 +107,6 @@ final class TheatronBuilder
         );
     }
 
-    // -------------------------------------------------------------------------
-    // Introspection
-
     /** @return class-string<Store>|null */
     public function registeredStore(): ?string
     {
@@ -143,21 +123,5 @@ final class TheatronBuilder
     public function registeredGlobalBindings(): array
     {
         return $this->globalBindings;
-    }
-
-    /** @return list<ServiceBundle> */
-    public function registeredServiceBundles(): array
-    {
-        return $this->bundles;
-    }
-
-    public function serviceBundle(): TheatronServiceBundle
-    {
-        return new TheatronServiceBundle(
-            screens: $this->screens,
-            storeClass: $this->storeClass,
-            stageConfig: $this->stageConfig,
-            theme: $this->theme,
-        );
     }
 }

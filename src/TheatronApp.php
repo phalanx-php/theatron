@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Phalanx\Theatron;
 
 use Phalanx\Cancellation\Cancelled;
+use Phalanx\Exception\ServiceNotFoundException;
 use Phalanx\Scope\ExecutionScope;
 use Phalanx\Theatron\Binding\Binding;
 use Phalanx\Theatron\Binding\BindingRegistry;
@@ -68,7 +69,12 @@ final class TheatronApp
         }
 
         if ($this->storeClass !== null) {
-            $store = new ($this->storeClass)();
+            try {
+                $store = $scope->service($this->storeClass);
+            } catch (ServiceNotFoundException) {
+                $store = new ($this->storeClass)();
+            }
+
             $mountSystem->provide($this->storeClass, $store);
             $mountSystem->provide(Store::class, $store);
         } else {

@@ -16,12 +16,8 @@ use Phalanx\Theatron\Styling\Theme;
 
 final class TheatronServiceBundle extends ServiceBundle
 {
-    /**
-     * @param list<class-string> $screens
-     * @param class-string<Store>|null $storeClass
-     */
+    /** @param class-string<Store>|null $storeClass */
     public function __construct(
-        private(set) array $screens = [],
         private(set) ?string $storeClass = null,
         private(set) StageConfig $stageConfig = new StageConfig(),
         private(set) ?Theme $theme = null,
@@ -52,6 +48,7 @@ final class TheatronServiceBundle extends ServiceBundle
             $storeClass = $this->storeClass;
             $services->singleton($storeClass)
                 ->factory(static fn(): Store => new $storeClass());
+            $services->alias(Store::class, $storeClass);
         }
     }
 }

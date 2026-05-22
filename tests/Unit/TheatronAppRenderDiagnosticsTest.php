@@ -14,7 +14,9 @@ use Phalanx\Theatron\Stage\Stage;
 use Phalanx\Theatron\Stage\StageConfig;
 use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Renderable;
+use Phalanx\Theatron\Template\AppStore;
 use Phalanx\Theatron\TheatronApp;
+use Phalanx\Theatron\TheatronServiceBundle;
 use PHPUnit\Framework\Attributes\Test;
 
 final class TheatronAppRenderDiagnosticsTest extends PhalanxTestCase
@@ -58,6 +60,47 @@ final class TheatronAppRenderDiagnosticsTest extends PhalanxTestCase
         );
         self::assertNull(AppRenderDiagnosticsProbeScreen::$renderRun->currentWait);
     }
+
+    #[Test]
+    public function appUsesConfiguredRuntimeStoreInstance(): void
+    {
+        StoreInstanceProbeScreen::$renderedStoreId = null;
+
+        $stream = fopen('php://memory', 'w+');
+        self::assertIsResource($stream);
+
+        $stageConfig = new StageConfig(
+            screenMode: ScreenMode::Inline,
+            bracketedPaste: false,
+            handleInput: false,
+            defaultExitHandler: false,
+            activeIntervalUs: 1_000,
+            stream: $stream,
+            env: [
+                'COLUMNS' => '20',
+                'LINES' => '5',
+            ],
+        );
+        $app = new TheatronApp(
+            Stage::boot($stageConfig),
+            Theme::default(),
+            [StoreInstanceProbeScreen::class],
+            [],
+            StoreInstanceProbeStore::class,
+            false,
+        );
+        $testApp = $this->testApp([], new TheatronServiceBundle(
+            storeClass: StoreInstanceProbeStore::class,
+            stageConfig: $stageConfig,
+        ));
+
+        $testApp->application->scoped(static function (ExecutionScope $scope) use ($app): void {
+            $serviceStore = $scope->service(StoreInstanceProbeStore::class);
+            $app->start($scope);
+
+            self::assertSame(spl_object_id($serviceStore), StoreInstanceProbeScreen::$renderedStoreId);
+        });
+    }
 }
 
 final class AppRenderDiagnosticsProbeScreen implements Screen
@@ -72,5 +115,27 @@ final class AppRenderDiagnosticsProbeScreen implements Screen
         }
 
         return $ctx->ui->text('app diagnostics');
+    }
+}
+
+final class StoreInstanceProbeStore extends AppStore
+{
+}
+
+final class StoreInstanceProbeScreen implements Screen
+{
+    public static ?int $renderedStoreId = null;
+
+    public function __construct(
+        private(set) StoreInstanceProbeStore $store,
+    ) {
+    }
+
+    public function __invoke(ScreenContext $ctx): Renderable
+    {
+        self::$renderedStoreId = spl_object_id($this->store);
+        $ctx->scope->cancellation()->cancel();
+
+        return $ctx->ui->text('store probe');
     }
 }

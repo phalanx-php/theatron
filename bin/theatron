@@ -5,23 +5,47 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/vendor/autoload_runtime.php';
 
-use Phalanx\Application;
-use Phalanx\Scope\ExecutionScope;
+use Phalanx\Theatron\Binding\Binding;
+use Phalanx\Theatron\Stage\StageConfig;
 use Phalanx\Theatron\Theatron;
-use Phalanx\Theatron\Template\TheatronTemplate;
+use Phalanx\Theatron\TheatronServiceBundle;
+use Phalanx\Theatron\Template\AppStore;
+use Phalanx\Theatron\Template\Screen\AgentBoardScreen;
+use Phalanx\Theatron\Template\Screen\ChatScreen;
+use Phalanx\Theatron\Template\Screen\DevToolsScreen;
+use Phalanx\Theatron\Template\Screen\LlmRequestDetailScreen;
+use Phalanx\Theatron\Template\Screen\SettingsScreen;
 
 return static function (array $context): \Closure {
     return static function () use ($context): int {
-        $builder = TheatronTemplate::configure(Theatron::app($context));
+        $screens = [
+            ChatScreen::class,
+            AgentBoardScreen::class,
+            DevToolsScreen::class,
+            LlmRequestDetailScreen::class,
+            SettingsScreen::class,
+        ];
+        $stageConfig = new StageConfig();
+
+        $builder = Theatron::app($context)
+            ->store(AppStore::class)
+            ->screens($screens)
+            ->globalBindings([
+                Binding::ctrl('c')->quit()->label('quit'),
+                Binding::ctrl('d')->workspace(DevToolsScreen::class)->label('devtools'),
+                Binding::ctrl('s')->workspace(SettingsScreen::class)->label('settings'),
+            ])
+            ->stageConfig($stageConfig)
+            ->devtools();
         $theatronApp = $builder->build();
 
-        Application::starting($context)
-            ->providers($builder->serviceBundle(), ...$builder->registeredServiceBundles())
-            ->compile()
-            ->run(static function (ExecutionScope $scope) use ($theatronApp): void {
-                $theatronApp->start($scope);
-            });
-
-        return 0;
+        return Theatron::starting($context)
+            ->providers(
+                new TheatronServiceBundle(
+                    storeClass: AppStore::class,
+                    stageConfig: $stageConfig,
+                ),
+            )
+            ->run($theatronApp);
     };
 };

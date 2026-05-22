@@ -57,6 +57,20 @@ class LlmRequestSlice
         return new self(array_values($entries), $this->focusedIndex, $this->detailScrollOffset);
     }
 
+    public function updateResponseBodyById(string $requestId, string $body): self
+    {
+        $entries = $this->entries;
+        $index = $this->findById($requestId);
+
+        if ($index === null) {
+            return $this;
+        }
+
+        $entries[$index] = $entries[$index]->withResponseBody($body);
+
+        return new self(array_values($entries), $this->focusedIndex, $this->detailScrollOffset);
+    }
+
     public function focusUp(): self
     {
         return new self($this->entries, max(0, $this->focusedIndex - 1), $this->detailScrollOffset);
@@ -74,14 +88,16 @@ class LlmRequestSlice
         return $this->entries[$this->focusedIndex] ?? null;
     }
 
-    public function updateFocusedTokenCount(int $tokenCount): self
+    public function updateTokenCountByInvocationId(string $invocationId, int $tokenCount): self
     {
-        if (!isset($this->entries[$this->focusedIndex])) {
+        $entries = $this->entries;
+        $index = $this->findByInvocationId($invocationId);
+
+        if ($index === null) {
             return $this;
         }
 
-        $entries = $this->entries;
-        $entries[$this->focusedIndex] = $entries[$this->focusedIndex]->withTokenCount($tokenCount);
+        $entries[$index] = $entries[$index]->withTokenCount($tokenCount);
 
         return new self(array_values($entries), $this->focusedIndex, $this->detailScrollOffset);
     }
@@ -105,6 +121,17 @@ class LlmRequestSlice
     {
         foreach ($this->entries as $i => $entry) {
             if ($entry->requestId === $requestId) {
+                return $i;
+            }
+        }
+
+        return null;
+    }
+
+    private function findByInvocationId(string $invocationId): ?int
+    {
+        foreach ($this->entries as $i => $entry) {
+            if ($entry->invocationId === $invocationId) {
                 return $i;
             }
         }

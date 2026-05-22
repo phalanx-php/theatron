@@ -13,4 +13,10 @@ final class Theatron
     {
         return new TheatronBuilder(new AppContext($context));
     }
+
+    /** @param array<string,mixed> $context */
+    public static function starting(array $context = []): TheatronRuntimeBuilder
+    {
+        return new TheatronRuntimeBuilder(new AppContext($context));
+    }
 }

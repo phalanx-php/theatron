@@ -141,5 +141,5 @@ echo sprintf("Input tokens: %d\n", $activity->inputTokens);
 echo sprintf("Output tokens: %d\n", $activity->outputTokens);
 echo sprintf("Total tokens: %d\n", $activity->totalTokens);
 echo sprintf("Recorded requests: %d\n", count($store->requests->entries));
-echo sprintf("Latest request: %s %s\n", $request?->method ?? 'none', $request?->path ?? 'none');
+echo sprintf("Latest request: %s %s\n", $request->method, $request->path);
 echo "--- done ---\n";

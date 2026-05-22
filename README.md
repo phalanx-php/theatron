@@ -33,35 +33,52 @@ php demos/full.php
 
 ## Current App Shape
 
-Configure the app with `Theatron::app()`, then register one store, screens,
-global bindings, optional service bundles, and the theme.
+Configure the UI with `Theatron::app()`, then start it with
+`Theatron::starting()`. Runtime bundles are registered directly in the
+bootstrap file.
 
 ```php
 use Phalanx\Theatron\Binding\Binding;
+use Phalanx\Theatron\Stage\StageConfig;
+use Phalanx\Theatron\Theatron;
+use Phalanx\Theatron\TheatronServiceBundle;
 use Phalanx\Theatron\Template\AppStore;
 use Phalanx\Theatron\Template\Screen\ChatScreen;
 use Phalanx\Theatron\Template\Screen\DevToolsScreen;
 use Phalanx\Theatron\Template\Screen\SettingsScreen;
-use Phalanx\Theatron\Theatron;
+
+$screens = [
+    ChatScreen::class,
+    DevToolsScreen::class,
+    SettingsScreen::class,
+];
+$stageConfig = new StageConfig();
 
 $app = Theatron::app($context)
     ->store(AppStore::class)
-    ->screens([
-        ChatScreen::class,
-        DevToolsScreen::class,
-        SettingsScreen::class,
-    ])
+    ->screens($screens)
     ->globalBindings([
         Binding::ctrl('c')->quit()->label('quit'),
         Binding::ctrl('d')->workspace(DevToolsScreen::class)->label('devtools'),
         Binding::ctrl('s')->workspace(SettingsScreen::class)->label('settings'),
     ])
-    ->devtools(true)
+    ->stageConfig($stageConfig)
+    ->devtools()
     ->build();
+
+return Theatron::starting($context)
+    ->providers(
+        new TheatronServiceBundle(
+            storeClass: AppStore::class,
+            stageConfig: $stageConfig,
+        ),
+    )
+    ->run($app);
 ```
 
-`bin/theatron` wraps that builder in `Application::starting(...)->run(...)`, so
-the `TheatronApp` starts inside an Aegis execution scope.
+`Theatron::starting(...)` is the app runtime entry point. Keep service bundles
+visible in the bootstrap instead of hiding them behind builder convenience
+methods.
 
 ## Components
 

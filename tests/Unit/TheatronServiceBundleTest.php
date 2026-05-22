@@ -93,11 +93,13 @@ final class TheatronServiceBundleTest extends TestCase
     }
 
     #[Test]
-    public function screensAreStoredOnBundle(): void
+    public function aliasesStoreBaseClassToConfiguredStore(): void
     {
-        $bundle = new TheatronServiceBundle(screens: [ApolloStore::class]);
+        $catalog = new ServiceCatalog(new AppContext());
+        $bundle = new TheatronServiceBundle(storeClass: ApolloStore::class);
+        $bundle->services($catalog, new AppContext());
 
-        self::assertSame([ApolloStore::class], $bundle->screens);
+        self::assertSame(ApolloStore::class, $catalog->compile()->alias(Store::class));
     }
 
     #[Test]
@@ -120,8 +122,6 @@ final class TheatronServiceBundleTest extends TestCase
     #[Test]
     public function nullThemeDefaultsToThemeDefault(): void
     {
-        // Theme::default() has private constructor; verify the bundle accepts
-        // null and registers Theme in the catalog (resolution uses Theme::default()).
         $catalog = new ServiceCatalog(new AppContext());
         $bundle = new TheatronServiceBundle(theme: null);
         $bundle->services($catalog, new AppContext());

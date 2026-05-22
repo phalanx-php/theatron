@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Phalanx\Theatron\Agent;
 
+use Phalanx\Cancellation\Cancelled;
 use Phalanx\Panoply\Runtime;
 use Phalanx\Panoply\Transport;
 use Phalanx\Panoply\Transport\Request;
@@ -22,6 +23,7 @@ final class LlmRequestRecordingTransport implements Transport
     public function __construct(
         private(set) Transport $inner,
         private(set) AppStore $store,
+        private(set) ?string $invocationId = null,
         ?\Closure $clock = null,
         ?\Closure $requestIds = null,
     ) {
@@ -29,9 +31,9 @@ final class LlmRequestRecordingTransport implements Transport
         $this->requestIds = $requestIds ?? static fn(): string => uniqid('req-', true);
     }
 
-    public static function wrap(Transport $transport, AppStore $store): self
+    public static function wrap(Transport $transport, AppStore $store, ?string $invocationId = null): self
     {
-        return new self($transport, $store);
+        return new self($transport, $store, $invocationId);
     }
 
     /**
@@ -42,6 +44,7 @@ final class LlmRequestRecordingTransport implements Transport
         $requestId = ($this->requestIds)();
         $startedAt = ($this->clock)();
         $responseBody = '';
+        $finished = false;
 
         $this->store->requests = $this->store->requests->append(new LlmRequestEntry(
             requestId: $requestId,
@@ -49,21 +52,38 @@ final class LlmRequestRecordingTransport implements Transport
             path: self::pathFromUrl($request->url),
             requestBody: $request->body,
             startTime: $startedAt,
+            invocationId: $this->invocationId,
         ));
 
         try {
             foreach ($this->inner->stream($request, $runtime) as $chunk) {
                 $responseBody .= $chunk;
+                $this->store->requests = $this->store->requests->updateResponseBodyById($requestId, $responseBody);
+
                 yield $chunk;
             }
 
             $this->complete($requestId, 200, $startedAt, $responseBody);
+            $finished = true;
         } catch (HttpError $e) {
             $this->complete($requestId, $e->statusCode, $startedAt, $e->responseBody);
+            $finished = true;
+
+            throw $e;
+        } catch (Cancelled $e) {
+            $this->error($requestId, $startedAt, new \RuntimeException('stream cancelled'));
+            $finished = true;
+
             throw $e;
         } catch (\Throwable $e) {
             $this->error($requestId, $startedAt, $e);
+            $finished = true;
+
             throw $e;
+        } finally {
+            if (!$finished) {
+                $this->error($requestId, $startedAt, new \RuntimeException('stream abandoned'));
+            }
         }
     }
 

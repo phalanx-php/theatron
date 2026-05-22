@@ -20,7 +20,19 @@ final class LlmRequestRecordingRouter implements InvocationRouter
     ) {
     }
 
-    public static function decorateProvider(Provider $provider, AppStore $store): Provider
+    public function route(TaskScope $scope, Agent $agent, Invocation $invocation): Provider
+    {
+        $provider = $this->inner->route($scope, $agent, $invocation);
+        $store = self::store($scope);
+
+        if ($store === null) {
+            return $provider;
+        }
+
+        return self::decorateProvider($provider, $store, $invocation);
+    }
+
+    private static function decorateProvider(Provider $provider, AppStore $store, Invocation $invocation): Provider
     {
         $reflection = new \ReflectionClass($provider);
         $constructor = $reflection->getConstructor();
@@ -57,7 +69,7 @@ final class LlmRequestRecordingRouter implements InvocationRouter
                 }
 
                 if (!$value instanceof LlmRequestRecordingTransport) {
-                    $value = LlmRequestRecordingTransport::wrap($value, $store);
+                    $value = LlmRequestRecordingTransport::wrap($value, $store, $invocation->id);
                 }
 
                 $decorated = true;
@@ -71,18 +83,6 @@ final class LlmRequestRecordingRouter implements InvocationRouter
         }
 
         return $reflection->newInstanceArgs($args);
-    }
-
-    public function route(TaskScope $scope, Agent $agent, Invocation $invocation): Provider
-    {
-        $provider = $this->inner->route($scope, $agent, $invocation);
-        $store = self::store($scope);
-
-        if ($store === null) {
-            return $provider;
-        }
-
-        return self::decorateProvider($provider, $store);
     }
 
     private static function store(TaskScope $scope): ?AppStore

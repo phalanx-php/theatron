@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Phalanx\Theatron\Tests\Unit\Agent;
 
+use Phalanx\Cancellation\Cancelled;
 use Phalanx\Panoply\Runtime;
 use Phalanx\Panoply\Transport;
 use Phalanx\Panoply\Transport\Request;
@@ -44,9 +45,69 @@ final class LlmRequestRecordingTransportTest extends TestCase
         self::assertSame(312, $entry->tokenCount);
         self::assertSame('{"model":"qwen3:4b"}', $entry->requestBody);
         self::assertSame('data: onedata: two', $entry->responseBody);
+        self::assertNull($entry->invocationId);
         self::assertTrue($entry->complete);
         self::assertNull($entry->error);
         self::assertEqualsWithDelta(39.5, $entry->elapsedMs ?? 0.0, 0.001);
+    }
+
+    #[Test]
+    public function recordsPendingRequestAndPartialResponseBeforeStreamCompletes(): void
+    {
+        $store = new AppStore();
+        $transport = new LlmRequestRecordingTransport(
+            inner: new ScriptedTransport(['data: one', 'data: two']),
+            store: $store,
+            invocationId: 'inv-1',
+            clock: self::clock(10.0, 10.1),
+            requestIds: static fn(): string => 'req-1',
+        );
+
+        $stream = $transport->stream(
+            Request::of('POST', 'https://example.com/api/chat', body: '{}'),
+            new NullRuntime(),
+        );
+
+        self::assertSame('data: one', $stream->current());
+
+        $entry = $store->requests->focused();
+        self::assertNotNull($entry);
+        self::assertSame('req-1', $entry->requestId);
+        self::assertSame('inv-1', $entry->invocationId);
+        self::assertSame('data: one', $entry->responseBody);
+        self::assertFalse($entry->complete);
+
+        iterator_to_array($stream, false);
+
+        self::assertTrue($store->requests->focused()?->complete);
+    }
+
+    #[Test]
+    public function abandonedStreamsStopBeingPending(): void
+    {
+        $store = new AppStore();
+        $transport = new LlmRequestRecordingTransport(
+            inner: new ScriptedTransport(['data: one', 'data: two']),
+            store: $store,
+            clock: self::clock(20.0, 20.25),
+            requestIds: static fn(): string => 'req-abandoned',
+        );
+
+        $stream = $transport->stream(
+            Request::of('POST', 'https://example.com/api/chat', body: '{}'),
+            new NullRuntime(),
+        );
+        self::assertSame('data: one', $stream->current());
+
+        unset($stream);
+        gc_collect_cycles();
+
+        $entry = $store->requests->focused();
+        self::assertNotNull($entry);
+        self::assertTrue($entry->complete);
+        self::assertSame('stream abandoned', $entry->error);
+        self::assertSame('data: one', $entry->responseBody);
+        self::assertEqualsWithDelta(250.0, $entry->elapsedMs ?? 0.0, 0.001);
     }
 
     #[Test]
@@ -111,6 +172,33 @@ final class LlmRequestRecordingTransportTest extends TestCase
         self::assertTrue($entry->complete);
         self::assertSame('connection refused', $entry->error);
         self::assertEqualsWithDelta(500.0, $entry->elapsedMs ?? 0.0, 0.001);
+    }
+
+    #[Test]
+    public function recordsCancellationWithoutUsingTransportFailureMessage(): void
+    {
+        $store = new AppStore();
+        $transport = new LlmRequestRecordingTransport(
+            inner: new FailingTransport(new Cancelled()),
+            store: $store,
+            clock: self::clock(3.0, 3.5),
+            requestIds: static fn(): string => 'req-cancelled',
+        );
+
+        try {
+            iterator_to_array($transport->stream(
+                Request::of('GET', 'https://example.com/cancelled'),
+                new NullRuntime(),
+            ), false);
+
+            self::fail('Expected Cancelled to be rethrown.');
+        } catch (Cancelled) {
+        }
+
+        $entry = $store->requests->focused();
+        self::assertNotNull($entry);
+        self::assertTrue($entry->complete);
+        self::assertSame('stream cancelled', $entry->error);
     }
 
     #[Test]

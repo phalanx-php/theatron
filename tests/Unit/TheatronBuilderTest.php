@@ -12,20 +12,14 @@ use Phalanx\Theatron\Binding\Binding;
 use Phalanx\Theatron\Context\ScreenContext;
 use Phalanx\Theatron\Contract\Screen;
 use Phalanx\Theatron\Reactive\SignalRegistry;
-use Phalanx\Theatron\Stage\ScreenMode;
-use Phalanx\Theatron\Stage\StageConfig;
 use Phalanx\Theatron\State\Store;
 use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Theatron;
 use Phalanx\Theatron\TheatronApp;
 use Phalanx\Theatron\TheatronBuilder;
-use Phalanx\Theatron\TheatronServiceBundle;
+use Phalanx\Theatron\TheatronRuntimeBuilder;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-
-// ---------------------------------------------------------------------------
-// Fixtures — Greek-themed
-// ---------------------------------------------------------------------------
 
 final class OlympusScreen implements Screen
 {
@@ -57,17 +51,6 @@ final class AresBundle extends ServiceBundle
     }
 }
 
-final class ApolloBundle extends ServiceBundle
-{
-    public function services(Services $services, AppContext $context): void
-    {
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 final class TheatronBuilderTest extends TestCase
 {
     #[Test]
@@ -76,6 +59,20 @@ final class TheatronBuilderTest extends TestCase
         $builder = Theatron::app([]);
 
         self::assertInstanceOf(TheatronBuilder::class, $builder);
+    }
+
+    #[Test]
+    public function startingReturnsRuntimeBuilder(): void
+    {
+        self::assertInstanceOf(TheatronRuntimeBuilder::class, Theatron::starting([]));
+    }
+
+    #[Test]
+    public function runtimeBuilderAcceptsProvidersDirectly(): void
+    {
+        $runtime = Theatron::starting([]);
+
+        self::assertSame($runtime, $runtime->providers(new AresBundle()));
     }
 
     #[Test]
@@ -261,33 +258,6 @@ final class TheatronBuilderTest extends TestCase
     }
 
     #[Test]
-    public function serviceBundleReturnsTheatronServiceBundle(): void
-    {
-        $bundle = Theatron::app()
-            ->screens([OlympusScreen::class])
-            ->store(ZeusStore::class)
-            ->serviceBundle();
-
-        self::assertInstanceOf(TheatronServiceBundle::class, $bundle);
-        self::assertSame(ZeusStore::class, $bundle->storeClass);
-        self::assertSame([OlympusScreen::class], $bundle->screens);
-    }
-
-    #[Test]
-    public function stageConfigOverrideIsApplied(): void
-    {
-        $config = new StageConfig(screenMode: ScreenMode::Inline, handleInput: false);
-
-        $bundle = Theatron::app()
-            ->screens([OlympusScreen::class])
-            ->stageConfig($config)
-            ->serviceBundle();
-
-        self::assertSame(ScreenMode::Inline, $bundle->stageConfig->screenMode);
-        self::assertFalse($bundle->stageConfig->handleInput);
-    }
-
-    #[Test]
     public function multipleBindingsAllPreserved(): void
     {
         $quit = Binding::ctrl('c')->quit();
@@ -299,31 +269,5 @@ final class TheatronBuilderTest extends TestCase
             ->build();
 
         self::assertCount(2, $app->globalBindings());
-    }
-
-    #[Test]
-    public function servicesAcceptsBundles(): void
-    {
-        $bundle = new AresBundle();
-        $builder = Theatron::app()
-            ->screens([OlympusScreen::class])
-            ->services($bundle);
-
-        self::assertSame($builder, $builder);
-        self::assertContains($bundle, $builder->registeredServiceBundles());
-    }
-
-    #[Test]
-    public function registeredServiceBundlesAccumulatesAcrossMultipleCalls(): void
-    {
-        $ares = new AresBundle();
-        $apollo = new ApolloBundle();
-
-        $builder = Theatron::app()
-            ->screens([OlympusScreen::class])
-            ->services($ares)
-            ->services($apollo);
-
-        self::assertSame([$ares, $apollo], $builder->registeredServiceBundles());
     }
 }

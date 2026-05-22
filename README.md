@@ -37,6 +37,8 @@ Configure and start the app with `Theatron::app()`. External runtime bundles are
 registered directly on the same builder.
 
 ```php
+<?php
+
 use Phalanx\Theatron\Binding\Binding;
 use Phalanx\Theatron\Theatron;
 use Phalanx\Theatron\TheatronApp;
@@ -77,6 +79,8 @@ A component implements `Component`. It receives a `RenderContext` and returns a
 `Renderable` tree.
 
 ```php
+<?php
+
 use Phalanx\Theatron\Context\RenderContext;
 use Phalanx\Theatron\Contract\Component;
 use Phalanx\Theatron\Tdom\Renderable;
@@ -100,6 +104,8 @@ class Greeting implements Component
 Mount children with the free `mount()` helper. Runtime params are named props.
 
 ```php
+<?php
+
 use function Phalanx\Theatron\Ui\mount;
 use function Phalanx\Theatron\Ui\panel;
 
@@ -120,6 +126,8 @@ are used when no runtime value is supplied.
 Signals use method syntax. Read with `get()`, write with `set()`.
 
 ```php
+<?php
+
 use Phalanx\Theatron\Context\RenderContext;
 use Phalanx\Theatron\Contract\Component;
 use Phalanx\Theatron\Reactive\Signal;
@@ -158,6 +166,8 @@ A screen implements `Screen`. It receives a `ScreenContext`, which carries the
 screen scope, theme, navigator, and mount system.
 
 ```php
+<?php
+
 use Phalanx\Theatron\Context\ScreenContext;
 use Phalanx\Theatron\Contract\Screen;
 use Phalanx\Theatron\Tdom\Renderable;
@@ -186,6 +196,8 @@ class DashboardScreen implements Screen
 Screens can declare their own focus targets, status bar, and key bindings.
 
 ```php
+<?php
+
 use Phalanx\Theatron\Binding\Binding;
 use Phalanx\Theatron\Contract\DeclaresBindings;
 use Phalanx\Theatron\Contract\Focusable;
@@ -238,6 +250,8 @@ slice once, expose it through property hooks, and update slices by assigning a
 new immutable value.
 
 ```php
+<?php
+
 use Phalanx\Theatron\State\Store;
 use Phalanx\Theatron\Template\Slice\ActivitySlice;
 use Phalanx\Theatron\Template\Slice\ConversationSlice;
@@ -265,6 +279,8 @@ final class AppStore extends Store
 Slices return new instances:
 
 ```php
+<?php
+
 $store->conversation = $store->conversation->addUserMessage($text);
 $store->activity = $store->activity->withStatus(ActivityStatus::Running);
 ```
@@ -272,6 +288,8 @@ $store->activity = $store->activity->withStatus(ActivityStatus::Running);
 `mutate()` still exists for batched slice updates:
 
 ```php
+<?php
+
 $store->mutate(
     ConversationSlice::class,
     static fn(ConversationSlice $slice): ConversationSlice => $slice->addUserMessage($text),
@@ -299,6 +317,8 @@ Build terminal UI with free functions from `Phalanx\Theatron\Ui`.
 Example:
 
 ```php
+<?php
+
 use Phalanx\Theatron\Layout\Border;
 use Phalanx\Theatron\Layout\Size;
 use Phalanx\Theatron\Style\Color;
@@ -344,6 +364,8 @@ Bindings are fluent objects registered globally or by a screen/component that
 implements `DeclaresBindings`.
 
 ```php
+<?php
+
 use Phalanx\Theatron\Binding\Binding;
 use Phalanx\Theatron\Input\Key;
 
@@ -354,9 +376,8 @@ use Phalanx\Theatron\Input\Key;
 ]
 ```
 
-Resolution is layered: focused component, active screen, global bindings. The
-active binding list can be rendered with `$ctx->hints()` in component render
-contexts.
+Resolution is layered: overlay stack, active screen, global bindings. The active
+binding list can be rendered with `$ctx->hints()` in component render contexts.
 
 ## Template Screens
 

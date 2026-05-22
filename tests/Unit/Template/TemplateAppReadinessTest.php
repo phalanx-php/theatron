@@ -7,7 +7,6 @@ namespace Phalanx\Theatron\Tests\Unit\Template;
 use Phalanx\Scope\ExecutionScope;
 use Phalanx\Scope\TaskScope;
 use Phalanx\Testing\PhalanxTestCase;
-use Phalanx\Theatron\Binding\Binding;
 use Phalanx\Theatron\Binding\BindingAction;
 use Phalanx\Theatron\Binding\BindingRegistry;
 use Phalanx\Theatron\Component\MountSystem;
@@ -29,7 +28,6 @@ use Phalanx\Theatron\Tdom\Element\RowElement;
 use Phalanx\Theatron\Tdom\Element\TextElement;
 use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Template\AppStore;
-use Phalanx\Theatron\Template\Screen\AgentBoardScreen;
 use Phalanx\Theatron\Template\Screen\ChatScreen;
 use Phalanx\Theatron\Template\Screen\DevToolsScreen;
 use Phalanx\Theatron\Template\Screen\LlmRequestDetailScreen;
@@ -37,6 +35,7 @@ use Phalanx\Theatron\Template\Screen\SettingsScreen;
 use Phalanx\Theatron\Template\Slice\DevToolsTab;
 use Phalanx\Theatron\Template\Slice\LlmRequestEntry;
 use Phalanx\Theatron\Template\Slice\SettingsTab;
+use Phalanx\Theatron\Template\TemplateApp;
 use Phalanx\Theatron\Text\Line;
 use Phalanx\Theatron\Theatron;
 use Phalanx\Theatron\TheatronApp;
@@ -55,21 +54,7 @@ final class TemplateAppReadinessTest extends PhalanxTestCase
         $testApp = $this->testApp([], new TheatronServiceBundle($app));
 
         $testApp->application->scoped(static function (ExecutionScope $scope) use ($app, $stream): void {
-            $canceller = null;
-            $attempts = 0;
-            $canceller = $scope->periodic(0.01, static function () use (
-                $scope,
-                $stream,
-                &$attempts,
-                &$canceller,
-            ): void {
-                $attempts++;
-
-                if (!str_contains(self::streamText($stream), 'Theatron') && $attempts < 50) {
-                    return;
-                }
-
-                $canceller?->cancel();
+            $app->stage->onFrame(static function () use ($scope): void {
                 $scope->cancellation()->cancel();
             });
 
@@ -97,7 +82,7 @@ final class TemplateAppReadinessTest extends PhalanxTestCase
         $builder = self::templateBuilder($stream);
         $app = $builder->build();
 
-        self::assertSame(self::templateScreens(), $builder->registeredScreens());
+        self::assertSame(TemplateApp::screens(), $builder->registeredScreens());
         self::assertCount(3, $builder->registeredGlobalBindings());
         self::assertCount(1, $builder->registeredProviders());
         self::assertSame(AppStore::class, $builder->registeredStore());
@@ -117,7 +102,7 @@ final class TemplateAppReadinessTest extends PhalanxTestCase
     }
 
     #[Test]
-    public function templateScreensRenderInspectionDetailAndSettingsReadiness(): void
+    public function templateScreensRenderInspectionDetailAndSettingsState(): void
     {
         $store = new AppStore();
         $store->requests = $store->requests->append(new LlmRequestEntry(
@@ -176,9 +161,9 @@ final class TemplateAppReadinessTest extends PhalanxTestCase
     private static function templateBuilder(mixed $stream): \Phalanx\Theatron\TheatronBuilder
     {
         return Theatron::app(['APP_ENV' => 'test'])
-            ->store(AppStore::class)
-            ->screens(self::templateScreens())
-            ->globalBindings(self::templateBindings())
+            ->store(TemplateApp::store())
+            ->screens(TemplateApp::screens())
+            ->globalBindings(TemplateApp::bindings())
             ->stageConfig(new StageConfig(
                 screenMode: ScreenMode::Inline,
                 bracketedPaste: false,
@@ -197,47 +182,9 @@ final class TemplateAppReadinessTest extends PhalanxTestCase
             ->devtools();
     }
 
-    /** @return list<class-string<Screen>> */
-    private static function templateScreens(): array
-    {
-        return [
-            ChatScreen::class,
-            AgentBoardScreen::class,
-            DevToolsScreen::class,
-            LlmRequestDetailScreen::class,
-            SettingsScreen::class,
-        ];
-    }
-
-    /** @return list<Binding> */
-    private static function templateBindings(): array
-    {
-        return [
-            Binding::ctrl('c')->quit()->label('quit'),
-            Binding::ctrl('d')->workspace(DevToolsScreen::class)->label('devtools'),
-            Binding::ctrl('s')->workspace(SettingsScreen::class)->label('settings'),
-        ];
-    }
-
     private static function stripAnsi(string $text): string
     {
         return (string) preg_replace('/\x1B(?:[@-Z\\\\-_]|\[[0-?]*[ -\/]*[@-~])/', '', $text);
-    }
-
-    /**
-     * @param resource $stream
-     */
-    private static function streamText(mixed $stream): string
-    {
-        $position = ftell($stream);
-        rewind($stream);
-        $text = self::stripAnsi((string) stream_get_contents($stream));
-
-        if (is_int($position)) {
-            fseek($stream, $position);
-        }
-
-        return $text;
     }
 
     private static function flatten(Renderable|string $renderable): string

@@ -47,6 +47,9 @@ final class Stage
     /** @var list<Closure(self): void> */
     private array $drawListeners = [];
 
+    /** @var list<Closure(): void> */
+    private array $frameListeners = [];
+
     private function __construct(
         private(set) StageConfig $config,
     ) {
@@ -103,6 +106,12 @@ final class Stage
     public function onDraw(Closure $listener): void
     {
         $this->drawListeners[] = $listener;
+    }
+
+    /** @param Closure(): void $listener */
+    public function onFrame(Closure $listener): void
+    {
+        $this->frameListeners[] = $listener;
     }
 
     public function width(): int
@@ -283,6 +292,10 @@ final class Stage
             $this->frameRequested = false;
 
             $this->frameCount++;
+
+            foreach ($this->frameListeners as $listener) {
+                $listener();
+            }
 
             if ($this->config->flushMemoryCaches && $this->frameCount % 60 === 0) {
                 gc_mem_caches();

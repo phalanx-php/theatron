@@ -5,13 +5,7 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/vendor/autoload_runtime.php';
 
-use Phalanx\Theatron\Binding\Binding;
-use Phalanx\Theatron\Template\AppStore;
-use Phalanx\Theatron\Template\Screen\AgentBoardScreen;
-use Phalanx\Theatron\Template\Screen\ChatScreen;
-use Phalanx\Theatron\Template\Screen\DevToolsScreen;
-use Phalanx\Theatron\Template\Screen\LlmRequestDetailScreen;
-use Phalanx\Theatron\Template\Screen\SettingsScreen;
+use Phalanx\Theatron\Template\TemplateApp;
 use Phalanx\Theatron\Theatron;
 use Phalanx\Theatron\TheatronApp;
 use Phalanx\Theatron\TheatronServiceBundle;
@@ -19,19 +13,9 @@ use Phalanx\Theatron\TheatronServiceBundle;
 return static function (array $context): \Closure {
     return static function () use ($context): int {
         return Theatron::app($context)
-            ->store(AppStore::class)
-            ->screens([
-                ChatScreen::class,
-                AgentBoardScreen::class,
-                DevToolsScreen::class,
-                LlmRequestDetailScreen::class,
-                SettingsScreen::class,
-            ])
-            ->globalBindings([
-                Binding::ctrl('c')->quit()->label('quit'),
-                Binding::ctrl('d')->workspace(DevToolsScreen::class)->label('devtools'),
-                Binding::ctrl('s')->workspace(SettingsScreen::class)->label('settings'),
-            ])
+            ->store(TemplateApp::store())
+            ->screens(TemplateApp::screens())
+            ->globalBindings(TemplateApp::bindings())
             ->providers(
                 static fn(TheatronApp $app): TheatronServiceBundle => new TheatronServiceBundle($app),
             )

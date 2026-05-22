@@ -7,7 +7,6 @@ namespace Phalanx\Theatron\Agent;
 use Phalanx\Athena\Activity\Activity;
 use Phalanx\Athena\Activity\Config;
 use Phalanx\Athena\Activity\Result;
-use Phalanx\Athena\Activity\State;
 use Phalanx\Athena\Grant\Scope as GrantScope;
 use Phalanx\Athena\Grant\Store as GrantStore;
 use Phalanx\Panoply\Agent;
@@ -24,8 +23,6 @@ use Phalanx\Theatron\Template\Slice\PendingEffect;
 
 final class AgentExecutor implements AgentExecutorContract
 {
-    private ?Result $lastResult = null;
-
     public function __construct(
         private(set) Activity $activity,
         private(set) TaskScope $scope,
@@ -58,22 +55,7 @@ final class AgentExecutor implements AgentExecutorContract
     {
         $this->rememberGrant($effect);
 
-        if ($this->lastResult === null) {
-            return [];
-        }
-
-        if ($this->lastResult->state !== State::Suspended) {
-            return [];
-        }
-
-        $result = ($this->activity)(
-            $this->scope,
-            $this->agent,
-            $this->config,
-            $this->lastResult->log,
-        );
-
-        return $this->record($result);
+        return [];
     }
 
     /** @return iterable<Cue> */
@@ -138,7 +120,5 @@ final class AgentExecutor implements AgentExecutorContract
         foreach ($result->stream as $cue) {
             yield $cue;
         }
-
-        $this->lastResult = $result;
     }
 }

@@ -59,10 +59,9 @@ class EffectApprovalOverlay implements Component, NormalModeHandler, Mountable
     public function handleNormalKey(KeyEvent $event): bool
     {
         if ($event->is('a') || $event->is('A')) {
-            if ($this->scope !== null) {
-                $this->runtime?->approve($this->scope);
-            }
-            if ($this->store !== null) {
+            if ($this->scope !== null && $this->runtime !== null) {
+                $this->runtime->approve($this->scope, $this->effect);
+            } elseif ($this->store !== null) {
                 $this->store->activity = $this->store->activity->effectResolved();
             }
             $this->navigator?->dismiss();
@@ -71,10 +70,9 @@ class EffectApprovalOverlay implements Component, NormalModeHandler, Mountable
         }
 
         if ($event->is('d') || $event->is('D')) {
-            if ($this->scope !== null) {
-                $this->runtime?->deny($this->scope);
-            }
-            if ($this->store !== null) {
+            if ($this->scope !== null && $this->runtime !== null) {
+                $this->runtime->deny($this->scope, $this->effect);
+            } elseif ($this->store !== null) {
                 $this->store->activity = $this->store->activity->effectResolved();
             }
             $this->navigator?->dismiss();

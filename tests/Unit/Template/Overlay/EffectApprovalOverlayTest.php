@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace Phalanx\Theatron\Tests\Unit\Template\Overlay;
 
+use DateTimeImmutable;
+use Phalanx\Panoply\Cue\Effect\Authorized as EffectAuthorized;
+use Phalanx\Panoply\Cue\Effect\Denied as EffectDenied;
 use Phalanx\Scope\TaskScope;
+use Phalanx\Theatron\Agent\AgentRuntime;
 use Phalanx\Theatron\Component\MountSystem;
 use Phalanx\Theatron\Context\RenderContext;
 use Phalanx\Theatron\Input\KeyEvent;
@@ -18,7 +22,10 @@ use Phalanx\Theatron\Template\AppStore;
 use Phalanx\Theatron\Template\Overlay\EffectApprovalOverlay;
 use Phalanx\Theatron\Template\Screen\ChatScreen;
 use Phalanx\Theatron\Template\Slice\ActivitySlice;
+use Phalanx\Theatron\Template\Slice\EffectStatus;
 use Phalanx\Theatron\Template\Slice\PendingEffect;
+use Phalanx\Theatron\Tests\Support\RecordingAgentExecutor;
+use Phalanx\Theatron\Tests\Support\RecordingTaskScope;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -159,15 +166,30 @@ final class EffectApprovalOverlayTest extends TestCase
             summary: 'Write the dispatch',
             arguments: [],
             hazardLevel: 1,
+            effectId: 'effect-approve',
         );
+        $at = new DateTimeImmutable();
+        $executor = new RecordingAgentExecutor(approvalCues: [
+            new EffectAuthorized('cue-authorized', 1, 'activity-1', null, null, $at, 'effect-approve', 'grant-1'),
+        ]);
         $store = new AppStore();
+        $store->effects = $store->effects->appendRequested($effect);
         $store->activity = new ActivitySlice(pendingEffect: $effect);
         $navigator = new EffectApprovalOverlayRecordingNavigator();
-        $overlay = new EffectApprovalOverlay($effect, $store, $navigator);
+        $overlay = new EffectApprovalOverlay(
+            $effect,
+            $store,
+            $navigator,
+            new AgentRuntime($store, $executor),
+        );
+        $overlay->onMount(new RecordingTaskScope());
 
         self::assertTrue($overlay->handleNormalKey(new KeyEvent('a')));
+        self::assertSame([$effect], $executor->approvedEffects);
         self::assertNull($store->activity->pendingEffect);
         self::assertSame(1, $navigator->dismissals);
+        self::assertSame(EffectStatus::Approved, $store->effects->entries[0]->status);
+        self::assertSame('grant-1', $store->effects->entries[0]->grantId);
     }
 
     #[Test]
@@ -178,15 +200,30 @@ final class EffectApprovalOverlayTest extends TestCase
             summary: 'Run the campaign',
             arguments: [],
             hazardLevel: 3,
+            effectId: 'effect-deny',
         );
+        $at = new DateTimeImmutable();
+        $executor = new RecordingAgentExecutor(denialCues: [
+            new EffectDenied('cue-denied', 1, 'activity-1', null, null, $at, 'effect-deny', ['user-denied']),
+        ]);
         $store = new AppStore();
+        $store->effects = $store->effects->appendRequested($effect);
         $store->activity = new ActivitySlice(pendingEffect: $effect);
         $navigator = new EffectApprovalOverlayRecordingNavigator();
-        $overlay = new EffectApprovalOverlay($effect, $store, $navigator);
+        $overlay = new EffectApprovalOverlay(
+            $effect,
+            $store,
+            $navigator,
+            new AgentRuntime($store, $executor),
+        );
+        $overlay->onMount(new RecordingTaskScope());
 
         self::assertTrue($overlay->handleNormalKey(new KeyEvent('d')));
+        self::assertSame([$effect], $executor->deniedEffects);
         self::assertNull($store->activity->pendingEffect);
         self::assertSame(1, $navigator->dismissals);
+        self::assertSame(EffectStatus::Denied, $store->effects->entries[0]->status);
+        self::assertSame(['user-denied'], $store->effects->entries[0]->reasonCodes);
     }
 
     private function makeContext(): RenderContext

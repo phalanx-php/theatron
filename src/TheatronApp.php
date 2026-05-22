@@ -185,6 +185,16 @@ final class TheatronApp
                     return;
                 }
 
+                $overlays = $navigator->overlays();
+                $topOverlay = $overlays !== [] ? $overlays[array_key_last($overlays)] : null;
+
+                if (
+                    $topOverlay?->component instanceof NormalModeHandler
+                    && $topOverlay->component->handleNormalKey($event)
+                ) {
+                    return;
+                }
+
                 $binding = $registry->resolve($event);
 
                 if ($binding !== null) {
@@ -240,16 +250,6 @@ final class TheatronApp
                 }
 
                 $activeBeforeDispatch = $navigator->active();
-
-                $overlays = $navigator->overlays();
-                $topOverlay = $overlays !== [] ? $overlays[array_key_last($overlays)] : null;
-
-                if (
-                    $topOverlay?->component instanceof NormalModeHandler
-                    && $topOverlay->component->handleNormalKey($event)
-                ) {
-                    return;
-                }
 
                 $dispatcher->dispatch($event);
 

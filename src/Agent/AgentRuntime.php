@@ -10,6 +10,7 @@ use Phalanx\Scope\TaskScope;
 use Phalanx\Supervisor\TaskHandle;
 use Phalanx\Theatron\Template\AppStore;
 use Phalanx\Theatron\Template\Slice\ActivityStatus;
+use Phalanx\Theatron\Template\Slice\PendingEffect;
 
 final class AgentRuntime
 {
@@ -32,9 +33,9 @@ final class AgentRuntime
         }, 'theatron-agent-send');
     }
 
-    public function approve(TaskScope $scope): void
+    public function approve(TaskScope $scope, ?PendingEffect $effect = null): void
     {
-        $effect = $this->store->activity->pendingEffect;
+        $effect ??= $this->store->activity->pendingEffect;
 
         if ($effect === null) {
             return;
@@ -42,6 +43,7 @@ final class AgentRuntime
 
         $store = $this->store;
         $executor = $this->executor;
+        $store->activity = $store->activity->effectResolved();
 
         $this->spawnOrRun($scope, static function () use ($scope, $store, $executor, $effect): void {
             self::consume($executor->approve($effect), $store);
@@ -49,9 +51,9 @@ final class AgentRuntime
         }, 'theatron-agent-approve');
     }
 
-    public function deny(TaskScope $scope): void
+    public function deny(TaskScope $scope, ?PendingEffect $effect = null): void
     {
-        $effect = $this->store->activity->pendingEffect;
+        $effect ??= $this->store->activity->pendingEffect;
 
         if ($effect === null) {
             return;

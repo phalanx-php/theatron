@@ -17,7 +17,7 @@ interface AgentExecutorContract
     public function send(string $message): iterable;
 
     /**
-     * Approve the currently pending effect and resume if the activity returned a suspended result.
+     * Approve the currently pending effect. Athena's suspended activity flow owns resumption.
      *
      * @return iterable<Cue>
      */

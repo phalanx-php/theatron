@@ -12,6 +12,7 @@ use Phalanx\Panoply\Cue\Activity\Started as ActivityStarted;
 use Phalanx\Panoply\Cue\Effect\Authorized as EffectAuthorized;
 use Phalanx\Panoply\Cue\Effect\Denied as EffectDenied;
 use Phalanx\Panoply\Cue\Effect\Executed as EffectExecuted;
+use Phalanx\Panoply\Cue\Effect\Failed as EffectFailed;
 use Phalanx\Panoply\Cue\Effect\Paused as EffectPaused;
 use Phalanx\Panoply\Cue\Effect\Requested as EffectRequested;
 use Phalanx\Panoply\Cue\Output\Channel;
@@ -210,7 +211,7 @@ final class StreamReactorTest extends TestCase
     }
 
     #[Test]
-    public function effectAuthorizedAndPausedUpdateEffectLog(): void
+    public function effectPausedMarksEffectPausedWithReason(): void
     {
         $store = new AppStore();
         $at = new DateTimeImmutable();
@@ -230,11 +231,77 @@ final class StreamReactorTest extends TestCase
                 requiresApproval: true,
             ),
             new EffectPaused('cue_2', 2, 'act_athena', 'inv_1', 'agent_athena', $at, 'eff_5', 'Approval required'),
-            new EffectAuthorized('cue_3', 3, 'act_athena', 'inv_1', 'agent_athena', $at, 'eff_5', 'grant_1'),
+        ], $store);
+
+        self::assertSame(EffectStatus::Paused, $store->effects->entries[0]->status);
+        self::assertSame(['Approval required'], $store->effects->entries[0]->reasonCodes);
+    }
+
+    #[Test]
+    public function effectAuthorizedMarksEffectApprovedWithGrant(): void
+    {
+        $store = new AppStore();
+        $at = new DateTimeImmutable();
+
+        StreamReactor::consume([
+            new EffectRequested(
+                id: 'cue_1',
+                sequence: 1,
+                activityId: 'act_athena',
+                invocationId: 'inv_1',
+                agentId: 'agent_athena',
+                at: $at,
+                effectId: 'eff_5',
+                kind: Kind::FileRead,
+                summary: 'Read a strategy note',
+                arguments: [],
+                requiresApproval: true,
+            ),
+            new EffectAuthorized('cue_2', 2, 'act_athena', 'inv_1', 'agent_athena', $at, 'eff_5', 'grant_1'),
         ], $store);
 
         self::assertSame(EffectStatus::Approved, $store->effects->entries[0]->status);
         self::assertSame('grant_1', $store->effects->entries[0]->grantId);
+    }
+
+    #[Test]
+    public function effectFailedResolvesEffectAndRecordsFailure(): void
+    {
+        $store = new AppStore();
+        $at = new DateTimeImmutable();
+
+        StreamReactor::consume([
+            new EffectRequested(
+                id: 'cue_1',
+                sequence: 1,
+                activityId: 'act_hermes',
+                invocationId: 'inv_1',
+                agentId: 'agent_hermes',
+                at: $at,
+                effectId: 'eff_6',
+                kind: Kind::WebFetch,
+                summary: 'Fetch dispatch',
+                arguments: [],
+                requiresApproval: true,
+            ),
+            new EffectFailed(
+                id: 'cue_2',
+                sequence: 2,
+                activityId: 'act_hermes',
+                invocationId: 'inv_1',
+                agentId: 'agent_hermes',
+                at: $at,
+                effectId: 'eff_6',
+                reason: 'network unavailable',
+                errorClass: \RuntimeException::class,
+            ),
+        ], $store);
+
+        self::assertSame(ActivityStatus::Running, $store->activity->status);
+        self::assertNull($store->activity->pendingEffect);
+        self::assertSame(EffectStatus::Failed, $store->effects->entries[0]->status);
+        self::assertSame(['network unavailable'], $store->effects->entries[0]->reasonCodes);
+        self::assertSame(\RuntimeException::class, $store->effects->entries[0]->errorClass);
     }
 
     #[Test]

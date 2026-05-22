@@ -277,6 +277,7 @@ class DevToolsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBin
             self::kv('repl.status', 'Agent [' . strtolower($activity->status->name) . ']'),
             self::kv('repl.input', mb_strlen($input->text) . ' chars'),
             self::kv('repl.requests', count($this->store->requests->entries) . ' entries'),
+            self::kv('repl.effects', count($this->store->effects->entries) . ' entries'),
             self::blank(),
         ];
 
@@ -412,8 +413,9 @@ class DevToolsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBin
         $conversation = $this->store->conversation;
         $agents = $this->store->agents;
         $activity = $this->store->activity;
+        $effects = $this->store->effects;
 
-        return [
+        $rows = [
             self::row(Line::from(Span::styled('  Store Slices', self::headerStyle()))),
             self::blank(),
             self::row(Line::from(Span::styled('  ConversationSlice', self::headerStyle()))),
@@ -431,5 +433,23 @@ class DevToolsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBin
             self::kv('out', (string) $activity->outputTokens),
             self::kv('total', (string) $activity->totalTokens),
         ];
+
+        $rows[] = self::blank();
+        $rows[] = self::row(Line::from(Span::styled('  EffectLogSlice', self::headerStyle())));
+
+        if ($effects->entries === []) {
+            $rows[] = self::kv('effects', 'none');
+
+            return $rows;
+        }
+
+        foreach (array_slice($effects->entries, -6) as $entry) {
+            $rows[] = self::kv(
+                $entry->effectId,
+                $entry->status->value . ' ' . $entry->kind . ' [' . $entry->hazard . ']',
+            );
+        }
+
+        return $rows;
     }
 }

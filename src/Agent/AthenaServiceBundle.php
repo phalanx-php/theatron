@@ -6,6 +6,8 @@ namespace Phalanx\Theatron\Agent;
 
 use Phalanx\Athena\AthenaBundle;
 use Phalanx\Boot\AppContext;
+use Phalanx\Panoply\Effect\Authorizer;
+use Phalanx\Panoply\Effect\Authorizer\Rules\Authorizer as RulesAuthorizer;
 use Phalanx\Service\ServiceBundle;
 use Phalanx\Service\Services;
 
@@ -31,5 +33,10 @@ final class AthenaServiceBundle extends ServiceBundle
         );
 
         $bundle->services($services, $context);
+
+        $services->singleton(ApprovalAuthorizer::class)
+            ->needs(RulesAuthorizer::class)
+            ->factory(static fn(RulesAuthorizer $inner): ApprovalAuthorizer => new ApprovalAuthorizer($inner));
+        $services->alias(Authorizer::class, ApprovalAuthorizer::class);
     }
 }

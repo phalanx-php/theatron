@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Phalanx\Theatron\Template\Screen;
 
+use Phalanx\Athena\Mcp\McpRegistry;
+use Phalanx\Athena\Tool\ToolRegistry;
 use Phalanx\Theatron\Binding\Binding;
 use Phalanx\Theatron\Context\ScreenContext;
 use Phalanx\Theatron\Contract\DeclaresBindings;
@@ -31,6 +33,8 @@ class SettingsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBin
 {
     public function __construct(
         private(set) AppStore $store,
+        private ?ToolRegistry $tools = null,
+        private ?McpRegistry $mcp = null,
     ) {
     }
 
@@ -55,6 +59,10 @@ class SettingsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBin
                     $settings->isEnabled($settings->activeTab, $i, $modelName),
                 ),
             );
+        }
+
+        foreach ($this->registryRows($settings->activeTab) as $line) {
+            $rows[] = self::row($line);
         }
 
         $rows[] = self::blank();
@@ -173,6 +181,22 @@ class SettingsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBin
         return TextStyle::new()->fg(Color::indexed(255))->bold();
     }
 
+    private static function blankLine(): Line
+    {
+        return Line::plain('');
+    }
+
+    private static function infoLine(string $text): Line
+    {
+        return Line::from(Span::styled('    ' . $text, TextStyle::new()->fg(Color::indexed(245))));
+    }
+
+    /** @param list<string> $names */
+    private static function names(array $names): string
+    {
+        return $names === [] ? 'none' : implode(', ', $names);
+    }
+
     private function tabs(): Line
     {
         $spans = [Span::plain('  ')];
@@ -198,5 +222,23 @@ class SettingsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBin
             : TextStyle::new()->fg(Color::indexed(250));
 
         return Line::from(Span::styled($text, $style));
+    }
+
+    /** @return list<Line> */
+    private function registryRows(SettingsTab $tab): array
+    {
+        return match ($tab) {
+            SettingsTab::Tools => [
+                self::blankLine(),
+                self::infoLine('Registered tools: ' . count($this->tools?->names() ?? [])),
+                self::infoLine('Tool names: ' . self::names($this->tools?->names() ?? [])),
+            ],
+            SettingsTab::Mcp => [
+                self::blankLine(),
+                self::infoLine('MCP servers: ' . count($this->mcp?->pendingServers() ?? [])),
+                self::infoLine('MCP tools: ' . count($this->mcp?->tools() ?? [])),
+            ],
+            default => [],
+        };
     }
 }

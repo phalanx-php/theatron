@@ -7,12 +7,17 @@ namespace Phalanx\Theatron\Tests\Unit\Template\Overlay;
 use Phalanx\Scope\TaskScope;
 use Phalanx\Theatron\Component\MountSystem;
 use Phalanx\Theatron\Context\RenderContext;
+use Phalanx\Theatron\Input\KeyEvent;
+use Phalanx\Theatron\Navigation\Navigator;
 use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Element\ColumnElement;
 use Phalanx\Theatron\Tdom\Element\DividerElement;
 use Phalanx\Theatron\Tdom\Element\PanelElement;
 use Phalanx\Theatron\Tdom\Element\TextElement;
+use Phalanx\Theatron\Template\AppStore;
 use Phalanx\Theatron\Template\Overlay\EffectApprovalOverlay;
+use Phalanx\Theatron\Template\Screen\ChatScreen;
+use Phalanx\Theatron\Template\Slice\ActivitySlice;
 use Phalanx\Theatron\Template\Slice\PendingEffect;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -146,6 +151,44 @@ final class EffectApprovalOverlayTest extends TestCase
         self::assertStringContainsString('Deny', $text);
     }
 
+    #[Test]
+    public function approveKeyResolvesPendingEffectAndDismissesOverlay(): void
+    {
+        $effect = new PendingEffect(
+            kind: 'file.write',
+            summary: 'Write the dispatch',
+            arguments: [],
+            hazardLevel: 1,
+        );
+        $store = new AppStore();
+        $store->activity = new ActivitySlice(pendingEffect: $effect);
+        $navigator = new EffectApprovalOverlayRecordingNavigator();
+        $overlay = new EffectApprovalOverlay($effect, $store, $navigator);
+
+        self::assertTrue($overlay->handleNormalKey(new KeyEvent('a')));
+        self::assertNull($store->activity->pendingEffect);
+        self::assertSame(1, $navigator->dismissals);
+    }
+
+    #[Test]
+    public function denyKeyResolvesPendingEffectAndDismissesOverlay(): void
+    {
+        $effect = new PendingEffect(
+            kind: 'process.run',
+            summary: 'Run the campaign',
+            arguments: [],
+            hazardLevel: 3,
+        );
+        $store = new AppStore();
+        $store->activity = new ActivitySlice(pendingEffect: $effect);
+        $navigator = new EffectApprovalOverlayRecordingNavigator();
+        $overlay = new EffectApprovalOverlay($effect, $store, $navigator);
+
+        self::assertTrue($overlay->handleNormalKey(new KeyEvent('d')));
+        self::assertNull($store->activity->pendingEffect);
+        self::assertSame(1, $navigator->dismissals);
+    }
+
     private function makeContext(): RenderContext
     {
         $scope = $this->createStub(TaskScope::class);
@@ -174,5 +217,37 @@ final class EffectApprovalOverlayTest extends TestCase
         }
 
         return '';
+    }
+}
+
+final class EffectApprovalOverlayRecordingNavigator implements Navigator
+{
+    public int $dismissals = 0;
+
+    public function go(string $screen): void
+    {
+    }
+
+    public function back(): bool
+    {
+        return false;
+    }
+
+    public function overlay(string $component, mixed ...$params): void
+    {
+    }
+
+    public function dismiss(): void
+    {
+        $this->dismissals++;
+    }
+
+    public function dismissAll(): void
+    {
+    }
+
+    public function active(): string
+    {
+        return ChatScreen::class;
     }
 }

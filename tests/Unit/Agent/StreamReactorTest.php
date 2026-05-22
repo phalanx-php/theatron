@@ -9,8 +9,10 @@ use Phalanx\Panoply\Cue\Activity\Cancelled as ActivityCancelled;
 use Phalanx\Panoply\Cue\Activity\Completed as ActivityCompleted;
 use Phalanx\Panoply\Cue\Activity\Failed as ActivityFailed;
 use Phalanx\Panoply\Cue\Activity\Started as ActivityStarted;
+use Phalanx\Panoply\Cue\Effect\Authorized as EffectAuthorized;
 use Phalanx\Panoply\Cue\Effect\Denied as EffectDenied;
 use Phalanx\Panoply\Cue\Effect\Executed as EffectExecuted;
+use Phalanx\Panoply\Cue\Effect\Paused as EffectPaused;
 use Phalanx\Panoply\Cue\Effect\Requested as EffectRequested;
 use Phalanx\Panoply\Cue\Output\Channel;
 use Phalanx\Panoply\Cue\Output\TokenDelta;
@@ -22,6 +24,7 @@ use Phalanx\Panoply\Effect\Kind;
 use Phalanx\Theatron\Agent\StreamReactor;
 use Phalanx\Theatron\Template\AppStore;
 use Phalanx\Theatron\Template\Slice\ActivityStatus;
+use Phalanx\Theatron\Template\Slice\EffectStatus;
 use Phalanx\Theatron\Template\Slice\LlmRequestEntry;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -114,6 +117,11 @@ final class StreamReactorTest extends TestCase
         self::assertSame(ActivityStatus::AwaitingApproval, $store->activity->status);
         self::assertNotNull($store->activity->pendingEffect);
         self::assertSame('file.write', $store->activity->pendingEffect->kind);
+        self::assertSame('act_ares', $store->activity->pendingEffect->activityId);
+        self::assertSame('eff_1', $store->activity->pendingEffect->effectId);
+        self::assertSame('medium', $store->activity->pendingEffect->hazard);
+        self::assertCount(1, $store->effects->entries);
+        self::assertSame(EffectStatus::Requested, $store->effects->entries[0]->status);
     }
 
     #[Test]
@@ -140,6 +148,8 @@ final class StreamReactorTest extends TestCase
 
         self::assertSame(ActivityStatus::Idle, $store->activity->status);
         self::assertNull($store->activity->pendingEffect);
+        self::assertCount(1, $store->effects->entries);
+        self::assertSame('eff_2', $store->effects->entries[0]->effectId);
     }
 
     #[Test]
@@ -167,6 +177,8 @@ final class StreamReactorTest extends TestCase
 
         self::assertSame(ActivityStatus::Running, $store->activity->status);
         self::assertNull($store->activity->pendingEffect);
+        self::assertSame(EffectStatus::Executed, $store->effects->entries[0]->status);
+        self::assertSame(42, $store->effects->entries[0]->durationMs);
     }
 
     #[Test]
@@ -193,6 +205,36 @@ final class StreamReactorTest extends TestCase
         ], $store);
 
         self::assertSame(ActivityStatus::Running, $store->activity->status);
+        self::assertSame(EffectStatus::Denied, $store->effects->entries[0]->status);
+        self::assertSame(['unauthorized'], $store->effects->entries[0]->reasonCodes);
+    }
+
+    #[Test]
+    public function effectAuthorizedAndPausedUpdateEffectLog(): void
+    {
+        $store = new AppStore();
+        $at = new DateTimeImmutable();
+
+        StreamReactor::consume([
+            new EffectRequested(
+                id: 'cue_1',
+                sequence: 1,
+                activityId: 'act_athena',
+                invocationId: 'inv_1',
+                agentId: 'agent_athena',
+                at: $at,
+                effectId: 'eff_5',
+                kind: Kind::FileRead,
+                summary: 'Read a strategy note',
+                arguments: [],
+                requiresApproval: true,
+            ),
+            new EffectPaused('cue_2', 2, 'act_athena', 'inv_1', 'agent_athena', $at, 'eff_5', 'Approval required'),
+            new EffectAuthorized('cue_3', 3, 'act_athena', 'inv_1', 'agent_athena', $at, 'eff_5', 'grant_1'),
+        ], $store);
+
+        self::assertSame(EffectStatus::Approved, $store->effects->entries[0]->status);
+        self::assertSame('grant_1', $store->effects->entries[0]->grantId);
     }
 
     #[Test]

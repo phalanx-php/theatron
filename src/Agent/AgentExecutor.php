@@ -6,20 +6,36 @@ namespace Phalanx\Theatron\Agent;
 
 use Phalanx\Athena\Activity\Activity;
 use Phalanx\Athena\Activity\Config;
+use Phalanx\Athena\Activity\Result;
+use Phalanx\Athena\Activity\State;
+use Phalanx\Athena\Grant\Scope as GrantScope;
+use Phalanx\Athena\Grant\Store as GrantStore;
 use Phalanx\Panoply\Agent;
 use Phalanx\Panoply\Conversation\Log;
+use Phalanx\Panoply\Cue;
+use Phalanx\Panoply\Cue\Activity\Cancelled as ActivityCancelled;
+use Phalanx\Panoply\Cue\Effect\Denied as EffectDenied;
+use Phalanx\Panoply\Effect\Kind;
+use Phalanx\Panoply\Grant;
+use Phalanx\Panoply\Hazard;
+use Phalanx\Panoply\Id;
 use Phalanx\Scope\TaskScope;
+use Phalanx\Theatron\Template\Slice\PendingEffect;
 
 final class AgentExecutor implements AgentExecutorContract
 {
+    private ?Result $lastResult = null;
+
     public function __construct(
         private(set) Activity $activity,
         private(set) TaskScope $scope,
         private(set) Agent $agent,
         private(set) Config $config,
+        private ?GrantStore $grantStore = null,
     ) {
     }
 
+    /** @return iterable<Cue> */
     public function send(string $message): iterable
     {
         $log = Log::from([
@@ -34,11 +50,95 @@ final class AgentExecutor implements AgentExecutorContract
 
         $result = ($this->activity)($this->scope, $this->agent, $this->config, $log);
 
-        return $result->stream;
+        return $this->record($result);
+    }
+
+    /** @return iterable<Cue> */
+    public function approve(PendingEffect $effect): iterable
+    {
+        $this->rememberGrant($effect);
+
+        if ($this->lastResult === null) {
+            return [];
+        }
+
+        if ($this->lastResult->state !== State::Suspended) {
+            return [];
+        }
+
+        $result = ($this->activity)(
+            $this->scope,
+            $this->agent,
+            $this->config,
+            $this->lastResult->log,
+        );
+
+        return $this->record($result);
+    }
+
+    /** @return iterable<Cue> */
+    public function deny(PendingEffect $effect): iterable
+    {
+        $at = new \DateTimeImmutable();
+
+        return [
+            new EffectDenied(
+                id: 'cue_' . Id::generate(),
+                sequence: 0,
+                activityId: $effect->activityId,
+                invocationId: $effect->invocationId,
+                agentId: $effect->agentId,
+                at: $at,
+                effectId: $effect->effectId,
+                reasonCodes: ['user-denied'],
+            ),
+            new ActivityCancelled(
+                id: 'cue_' . Id::generate(),
+                sequence: 1,
+                activityId: $effect->activityId,
+                invocationId: $effect->invocationId,
+                agentId: $effect->agentId,
+                at: $at,
+                reason: 'Effect denied by user.',
+            ),
+        ];
     }
 
     public function cancel(): void
     {
         $this->scope->throwIfCancelled();
+    }
+
+    private function rememberGrant(PendingEffect $effect): void
+    {
+        if ($this->grantStore === null) {
+            return;
+        }
+
+        $kind = Kind::tryFrom($effect->kind) ?? Kind::Custom;
+        $hazard = Hazard::tryFrom($effect->hazard) ?? Hazard::High;
+
+        $this->grantStore->remember(
+            $this->scope,
+            new Grant(
+                id: 'grant_' . Id::generate(),
+                subject: $effect->agentId ?? $this->agent->id,
+                allowedEffects: [$kind],
+                scope: GrantScope::Once->value,
+                hazardCeiling: $hazard,
+            ),
+        );
+    }
+
+    /**
+     * @return iterable<Cue>
+     */
+    private function record(Result $result): iterable
+    {
+        foreach ($result->stream as $cue) {
+            yield $cue;
+        }
+
+        $this->lastResult = $result;
     }
 }

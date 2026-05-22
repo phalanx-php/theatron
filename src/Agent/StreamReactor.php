@@ -9,18 +9,23 @@ use Phalanx\Panoply\Cue\Activity\Cancelled as ActivityCancelled;
 use Phalanx\Panoply\Cue\Activity\Completed as ActivityCompleted;
 use Phalanx\Panoply\Cue\Activity\Failed as ActivityFailed;
 use Phalanx\Panoply\Cue\Activity\Started as ActivityStarted;
+use Phalanx\Panoply\Cue\Effect\Authorized as EffectAuthorized;
 use Phalanx\Panoply\Cue\Effect\Denied as EffectDenied;
 use Phalanx\Panoply\Cue\Effect\Executed as EffectExecuted;
 use Phalanx\Panoply\Cue\Effect\Failed as EffectFailed;
+use Phalanx\Panoply\Cue\Effect\Paused as EffectPaused;
 use Phalanx\Panoply\Cue\Effect\Requested as EffectRequested;
 use Phalanx\Panoply\Cue\Output\Channel;
 use Phalanx\Panoply\Cue\Output\TokenDelta;
 use Phalanx\Panoply\Cue\Output\TokenStop;
 use Phalanx\Panoply\Cue\Usage\Delta as UsageDelta;
 use Phalanx\Panoply\Cue\Usage\FinalUsage;
+use Phalanx\Panoply\Effect;
+use Phalanx\Panoply\Hazard\Scorer\Rules\Scorer;
 use Phalanx\Theatron\Template\AppStore;
 use Phalanx\Theatron\Template\Slice\ActivitySlice;
 use Phalanx\Theatron\Template\Slice\ActivityStatus;
+use Phalanx\Theatron\Template\Slice\EffectStatus;
 use Phalanx\Theatron\Template\Slice\PendingEffect;
 
 final class StreamReactor
@@ -40,9 +45,11 @@ final class StreamReactor
         match (true) {
             $cue instanceof TokenStop => self::onTokenStop($store),
             $cue instanceof TokenDelta => self::onTokenDelta($cue, $store),
-            $cue instanceof EffectFailed => self::onEffectResolved($store),
-            $cue instanceof EffectDenied => self::onEffectResolved($store),
-            $cue instanceof EffectExecuted => self::onEffectResolved($store),
+            $cue instanceof EffectAuthorized => self::onEffectAuthorized($cue, $store),
+            $cue instanceof EffectPaused => self::onEffectPaused($cue, $store),
+            $cue instanceof EffectFailed => self::onEffectFailed($cue, $store),
+            $cue instanceof EffectDenied => self::onEffectDenied($cue, $store),
+            $cue instanceof EffectExecuted => self::onEffectExecuted($cue, $store),
             $cue instanceof EffectRequested => self::onEffectRequested($cue, $store),
             $cue instanceof ActivityStarted => self::onActivityStarted($store),
             $cue instanceof ActivityFailed => self::onActivityEnded($store, ActivityStatus::Failed),
@@ -71,18 +78,83 @@ final class StreamReactor
 
     private static function onEffectRequested(EffectRequested $cue, AppStore $store): void
     {
-        if (!$cue->requiresApproval) {
-            return;
-        }
+        $hazard = new Scorer()->score(Effect::of(
+            id: $cue->effectId,
+            kind: $cue->kind,
+            summary: $cue->summary,
+            arguments: $cue->arguments,
+            requiresApproval: $cue->requiresApproval,
+        ));
 
+        $hazardLevel = $hazard->rank();
         $effect = new PendingEffect(
             kind: $cue->kind->value,
             summary: $cue->summary,
             arguments: $cue->arguments,
-            hazardLevel: 0,
+            hazardLevel: $hazardLevel,
+            activityId: $cue->activityId,
+            effectId: $cue->effectId,
+            agentId: $cue->agentId,
+            invocationId: $cue->invocationId,
+            hazard: $hazard->value,
         );
 
+        $store->effects = $store->effects->appendRequested($effect);
+
+        if (!$cue->requiresApproval) {
+            return;
+        }
+
         $store->activity = $store->activity->awaitingApproval($effect);
+    }
+
+    private static function onEffectAuthorized(EffectAuthorized $cue, AppStore $store): void
+    {
+        $store->effects = $store->effects->mark(
+            $cue->effectId,
+            EffectStatus::Approved,
+            grantId: $cue->grantId,
+        );
+    }
+
+    private static function onEffectPaused(EffectPaused $cue, AppStore $store): void
+    {
+        $store->effects = $store->effects->mark(
+            $cue->effectId,
+            EffectStatus::Paused,
+            reasonCodes: [$cue->reason],
+        );
+    }
+
+    private static function onEffectExecuted(EffectExecuted $cue, AppStore $store): void
+    {
+        $store->effects = $store->effects->mark(
+            $cue->effectId,
+            EffectStatus::Executed,
+            durationMs: $cue->durationMs,
+        );
+        self::onEffectResolved($store);
+    }
+
+    private static function onEffectDenied(EffectDenied $cue, AppStore $store): void
+    {
+        $store->effects = $store->effects->mark(
+            $cue->effectId,
+            EffectStatus::Denied,
+            reasonCodes: $cue->reasonCodes,
+        );
+        self::onEffectResolved($store);
+    }
+
+    private static function onEffectFailed(EffectFailed $cue, AppStore $store): void
+    {
+        $store->effects = $store->effects->mark(
+            $cue->effectId,
+            EffectStatus::Failed,
+            reasonCodes: [$cue->reason],
+            errorClass: $cue->errorClass,
+        );
+        self::onEffectResolved($store);
     }
 
     private static function onEffectResolved(AppStore $store): void

@@ -70,6 +70,7 @@ final class WorkspaceNavigator implements Navigator
     {
         $mounted = $this->mountSystem->mountComponent($component, ...$params);
         $this->overlayStack[] = $mounted;
+        $this->workspaces[$this->activeScreen]->markDirty();
     }
 
     public function dismiss(): void
@@ -80,6 +81,7 @@ final class WorkspaceNavigator implements Navigator
 
         $top = array_pop($this->overlayStack);
         $top->dispose();
+        $this->workspaces[$this->activeScreen]->markDirty();
     }
 
     public function dismissAll(): void
@@ -90,6 +92,8 @@ final class WorkspaceNavigator implements Navigator
         foreach (array_reverse($stack) as $overlay) {
             $overlay->dispose();
         }
+
+        $this->workspaces[$this->activeScreen]->markDirty();
     }
 
     public function active(): string

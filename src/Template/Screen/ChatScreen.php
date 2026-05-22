@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace Phalanx\Theatron\Template\Screen;
 
+use Phalanx\Scope\TaskScope;
+use Phalanx\Theatron\Agent\AgentRuntime;
 use Phalanx\Theatron\Binding\Binding;
 use Phalanx\Theatron\Context\ScreenContext;
 use Phalanx\Theatron\Contract\DeclaresBindings;
 use Phalanx\Theatron\Contract\Focusable;
 use Phalanx\Theatron\Contract\HasFocusables;
 use Phalanx\Theatron\Contract\HasStatusBar;
+use Phalanx\Theatron\Contract\Mountable;
 use Phalanx\Theatron\Contract\Screen;
 use Phalanx\Theatron\Input\Key;
 use Phalanx\Theatron\Input\KeyEvent;
@@ -31,7 +34,7 @@ use function Phalanx\Theatron\Ui\column;
 use function Phalanx\Theatron\Ui\input;
 use function Phalanx\Theatron\Ui\text;
 
-class ChatScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBindings
+class ChatScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBindings, Mountable
 {
     private const array PULSE_COLORS = [242, 245, 248, 251, 254, 251, 248, 245];
 
@@ -39,9 +42,11 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBinding
     private(set) ChatConversationHandler $conversationHandler;
     private(set) ChatInputHandler $inputHandler;
     private MarkdownRenderer $markdown;
+    private ?TaskScope $scope = null;
 
     public function __construct(
         private(set) AppStore $store,
+        private ?AgentRuntime $runtime = null,
     ) {
         $this->inputText = new Signal('');
         $this->conversationHandler = new ChatConversationHandler($this);
@@ -60,6 +65,16 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBinding
             self::rule(30),
             self::spacer(),
         );
+    }
+
+    public function onMount(TaskScope $scope): void
+    {
+        $this->scope = $scope;
+    }
+
+    public function onUnmount(): void
+    {
+        $this->scope = null;
     }
 
     public function statusBar(): Renderable
@@ -166,6 +181,7 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBinding
 
         $this->store->conversation = $this->store->conversation->addUserMessage($text);
         $this->store->activity = $this->store->activity->withStatus(ActivityStatus::Running);
+        $this->runtime?->send($this->scope ?? throw new \RuntimeException('ChatScreen is not mounted.'), $text);
 
         return true;
     }

@@ -4,17 +4,31 @@ declare(strict_types=1);
 
 namespace Phalanx\Theatron\Agent;
 
+use Phalanx\Panoply\Cue;
+use Phalanx\Theatron\Template\Slice\PendingEffect;
+
 interface AgentExecutorContract
 {
     /**
      * Send a user message and get back a cue stream.
      *
-     * @return iterable<\Phalanx\Panoply\Cue>
+     * @return iterable<Cue>
      */
     public function send(string $message): iterable;
 
     /**
-     * Cancel the current activity if one is running.
+     * Approve the currently pending effect and resume if the activity returned a suspended result.
+     *
+     * @return iterable<Cue>
      */
+    public function approve(PendingEffect $effect): iterable;
+
+    /**
+     * Deny the currently pending effect.
+     *
+     * @return iterable<Cue>
+     */
+    public function deny(PendingEffect $effect): iterable;
+
     public function cancel(): void;
 }

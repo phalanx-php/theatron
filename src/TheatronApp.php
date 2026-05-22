@@ -7,6 +7,9 @@ namespace Phalanx\Theatron;
 use Phalanx\Cancellation\Cancelled;
 use Phalanx\Exception\ServiceNotFoundException;
 use Phalanx\Scope\ExecutionScope;
+use Phalanx\Theatron\Agent\AgentExecutorContract;
+use Phalanx\Theatron\Agent\AgentRuntime;
+use Phalanx\Theatron\Agent\EffectApprovalReactor;
 use Phalanx\Theatron\Binding\Binding;
 use Phalanx\Theatron\Binding\BindingRegistry;
 use Phalanx\Theatron\Buffer\Buffer;
@@ -25,6 +28,7 @@ use Phalanx\Theatron\Input\InputMode;
 use Phalanx\Theatron\Input\InputModeSlice;
 use Phalanx\Theatron\Input\KeyEvent;
 use Phalanx\Theatron\Input\ModeDispatcher;
+use Phalanx\Theatron\Input\NormalModeHandler;
 use Phalanx\Theatron\Kit\ScreenLayout;
 use Phalanx\Theatron\Navigation\Navigator;
 use Phalanx\Theatron\Navigation\WorkspaceNavigator;
@@ -37,6 +41,7 @@ use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Painter\PaintContext;
 use Phalanx\Theatron\Tdom\Painter\Painter;
 use Phalanx\Theatron\Tdom\Renderable;
+use Phalanx\Theatron\Template\AppStore;
 
 final class TheatronApp
 {
@@ -81,6 +86,14 @@ final class TheatronApp
             $store = null;
         }
 
+        if ($store instanceof AppStore) {
+            try {
+                $executor = $scope->service(AgentExecutorContract::class);
+                $mountSystem->provide(AgentRuntime::class, new AgentRuntime($store, $executor));
+            } catch (ServiceNotFoundException) {
+            }
+        }
+
         $navigator = new WorkspaceNavigator($mountSystem, $this->screens[0]);
         $mountSystem->provide(Navigator::class, $navigator);
         $registry->activateScreen($this->screens[0]);
@@ -115,11 +128,24 @@ final class TheatronApp
             $screenCtx,
             $renderCtx,
             $statusMountOwner,
+            $store,
         ): void {
+            if ($store instanceof AppStore) {
+                EffectApprovalReactor::check($store, $navigator);
+            }
+
             $workspace = $navigator->activeWorkspace();
             $statusIsDirty = $mountSystem->hasDirtyOwnedSlots($statusMountOwner);
+            $overlays = $navigator->overlays();
+            $topOverlay = $overlays !== [] ? $overlays[array_key_last($overlays)] : null;
+            $overlayIsDirty = $topOverlay !== null && ($topOverlay->isDirty || $topOverlay->lastResult() === null);
 
-            if (!$workspace->isDirty && !$mountSystem->hasDirtyOwnedSlots($workspace) && !$statusIsDirty) {
+            if (
+                !$workspace->isDirty
+                && !$mountSystem->hasDirtyOwnedSlots($workspace)
+                && !$statusIsDirty
+                && !$overlayIsDirty
+            ) {
                 return;
             }
 
@@ -129,6 +155,14 @@ final class TheatronApp
                 : $workspace->lastResult();
 
             self::paintRegion($renderable, $mainRegion, $renderCtx, $workspace);
+
+            if ($topOverlay !== null) {
+                $overlayRenderable = $topOverlay->isDirty || $topOverlay->lastResult() === null
+                    ? $topOverlay->render($renderCtx)
+                    : $topOverlay->lastResult();
+
+                self::paintRegion($overlayRenderable, $mainRegion, $renderCtx, $topOverlay);
+            }
 
             $statusRegion = $layout->region('status');
             $screen = $workspace->screen;
@@ -206,6 +240,17 @@ final class TheatronApp
                 }
 
                 $activeBeforeDispatch = $navigator->active();
+
+                $overlays = $navigator->overlays();
+                $topOverlay = $overlays !== [] ? $overlays[array_key_last($overlays)] : null;
+
+                if (
+                    $topOverlay?->component instanceof NormalModeHandler
+                    && $topOverlay->component->handleNormalKey($event)
+                ) {
+                    return;
+                }
+
                 $dispatcher->dispatch($event);
 
                 if ($navigator->active() !== $activeBeforeDispatch) {

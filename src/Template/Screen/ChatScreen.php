@@ -37,6 +37,7 @@ use function Phalanx\Theatron\Ui\text;
 class ChatScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBindings, Mountable
 {
     private const array PULSE_COLORS = [242, 245, 248, 251, 254, 251, 248, 245];
+    private const int LOCAL_FOOTER_ROWS = 6;
 
     private(set) Signal $inputText;
     private(set) ChatConversationHandler $conversationHandler;
@@ -57,12 +58,12 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBinding
     public function __invoke(ScreenContext $ctx): Renderable
     {
         return column(
-            $this->renderConversation(120, 18),
+            $this->renderConversation($ctx->width, max(1, $ctx->height - self::LOCAL_FOOTER_ROWS)),
             self::spacer(),
             $this->renderStatusLine(),
             self::spacer(),
             $this->renderInput(),
-            self::rule(30),
+            self::rule(min((int) ($ctx->width * 0.4), 30)),
             self::spacer(),
         );
     }
@@ -182,6 +183,46 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBinding
         $this->store->conversation = $this->store->conversation->addUserMessage($text);
         $this->store->activity = $this->store->activity->withStatus(ActivityStatus::Running);
         $this->runtime?->send($this->scope ?? throw new \RuntimeException('ChatScreen is not mounted.'), $text);
+
+        return true;
+    }
+
+    public function undoLastQueuedInput(): bool
+    {
+        if ((string) $this->inputText->get() !== '') {
+            return false;
+        }
+
+        $message = $this->store->input->lastQueued();
+
+        if ($message === null) {
+            return false;
+        }
+
+        $this->inputText->set($message);
+        $this->store->input = $this->store->input
+            ->removeLastQueued()
+            ->withText($message);
+
+        return true;
+    }
+
+    public function undoAllQueuedInput(): bool
+    {
+        if ((string) $this->inputText->get() !== '') {
+            return false;
+        }
+
+        if ($this->store->input->queue === []) {
+            return false;
+        }
+
+        $text = $this->store->input->queuedText();
+
+        $this->inputText->set($text);
+        $this->store->input = $this->store->input
+            ->clearQueue()
+            ->withText($text);
 
         return true;
     }
@@ -392,6 +433,16 @@ class ChatScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBinding
             $spans[] = self::pipe();
             $queuedText = $count === 1 ? '1 queued' : "{$count} queued";
             $spans[] = Span::styled($queuedText, TextStyle::new()->fg(Color::indexed(242)));
+
+            if ((string) $this->inputText->get() === '') {
+                $spans[] = self::pipe();
+                $spans[] = Span::styled('↑ undo last', TextStyle::new()->fg(Color::indexed(245)));
+
+                if ($count > 1) {
+                    $spans[] = self::pipe();
+                    $spans[] = Span::styled('^U undo all', TextStyle::new()->fg(Color::indexed(245)));
+                }
+            }
         }
 
         return self::row(Line::from(...$spans));

@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Phalanx\Theatron\Tests\Unit\Template\Screen;
 
 use Phalanx\Scope\TaskScope;
+use Phalanx\Theatron\Buffer\Buffer;
+use Phalanx\Theatron\Buffer\Rect;
 use Phalanx\Theatron\Component\MountSystem;
 use Phalanx\Theatron\Context\ScreenContext;
 use Phalanx\Theatron\Input\Key;
@@ -16,6 +18,8 @@ use Phalanx\Theatron\Tdom\Element\InputElement;
 use Phalanx\Theatron\Tdom\Element\PanelElement;
 use Phalanx\Theatron\Tdom\Element\RowElement;
 use Phalanx\Theatron\Tdom\Element\TextElement;
+use Phalanx\Theatron\Tdom\Painter\PaintContext;
+use Phalanx\Theatron\Tdom\Painter\Painter;
 use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Template\AppStore;
 use Phalanx\Theatron\Template\Screen\ChatConversationHandler;
@@ -73,6 +77,57 @@ final class ChatScreenTest extends TestCase
         self::assertStringContainsString('you: and another', $text);
         self::assertStringContainsString('assistant:', $text);
         self::assertStringContainsString('Final answer stays expanded.', $text);
+    }
+
+    #[Test]
+    public function paintsLatestConversationRowsAtBottomAboveComposer(): void
+    {
+        $store = new AppStore();
+        $store->conversation = new ConversationSlice()
+            ->addUserMessage('bottom anchored message')
+            ->appendToken('short answer');
+        $screen = new ChatScreen($store);
+        $buffer = self::paint(
+            $screen($this->makeContext($store, width: 80, height: 30)),
+            width: 80,
+            height: 30,
+        );
+
+        $answerRow = self::findRowContaining($buffer, 'short answer');
+        $statusRow = self::findRowContaining($buffer, 'Λ idle');
+        $inputRow = self::findRowContaining($buffer, '+>');
+
+        self::assertSame(22, $answerRow);
+        self::assertSame(25, $statusRow);
+        self::assertSame(27, $inputRow);
+    }
+
+    #[Test]
+    public function conversationBottomAnchorRecalculatesFromContextHeight(): void
+    {
+        $store = new AppStore();
+        $store->conversation = new ConversationSlice()
+            ->addUserMessage('resized message')
+            ->appendToken('resized answer');
+        $screen = new ChatScreen($store);
+
+        $short = self::paint(
+            $screen($this->makeContext($store, width: 80, height: 20)),
+            width: 80,
+            height: 20,
+        );
+        $tall = self::paint(
+            $screen($this->makeContext($store, width: 80, height: 32)),
+            width: 80,
+            height: 32,
+        );
+
+        $shortAnswerRow = self::findRowContaining($short, 'resized answer');
+        $tallAnswerRow = self::findRowContaining($tall, 'resized answer');
+
+        self::assertSame(self::findRowContaining($short, 'Λ idle') - 3, $shortAnswerRow);
+        self::assertSame(self::findRowContaining($tall, 'Λ idle') - 3, $tallAnswerRow);
+        self::assertGreaterThan($shortAnswerRow, $tallAnswerRow);
     }
 
     #[Test]
@@ -208,6 +263,77 @@ final class ChatScreenTest extends TestCase
     }
 
     #[Test]
+    public function inputHandlerUpRestoresLastQueuedMessageIntoEmptyComposer(): void
+    {
+        $store = new AppStore();
+        $store->input = $store->input
+            ->enqueue('first queued')
+            ->enqueue('second queued');
+        $screen = new ChatScreen($store);
+        $handler = new ChatInputHandler($screen);
+
+        self::assertTrue($handler->handleInput(new KeyEvent(Key::Up)));
+
+        self::assertSame('second queued', $screen->inputText->get());
+        self::assertSame('second queued', $store->input->text);
+        self::assertSame(['first queued'], $store->input->queue);
+    }
+
+    #[Test]
+    public function inputHandlerCtrlURestoresAllQueuedMessagesIntoEmptyComposer(): void
+    {
+        $store = new AppStore();
+        $store->input = $store->input
+            ->enqueue('first queued')
+            ->enqueue('second queued')
+            ->enqueue('third queued');
+        $screen = new ChatScreen($store);
+        $handler = new ChatInputHandler($screen);
+
+        self::assertTrue($handler->handleInput(new KeyEvent('u', ctrl: true)));
+
+        self::assertSame("first queued\n\nsecond queued\n\nthird queued", $screen->inputText->get());
+        self::assertSame("first queued\n\nsecond queued\n\nthird queued", $store->input->text);
+        self::assertSame([], $store->input->queue);
+    }
+
+    #[Test]
+    public function inputHandlerCtrlUpDoesNotRestoreQueuedMessages(): void
+    {
+        $store = new AppStore();
+        $store->input = $store->input
+            ->enqueue('first queued')
+            ->enqueue('second queued');
+        $screen = new ChatScreen($store);
+        $handler = new ChatInputHandler($screen);
+
+        self::assertFalse($handler->handleInput(new KeyEvent(Key::Up, ctrl: true)));
+
+        self::assertSame('', $screen->inputText->get());
+        self::assertSame('', $store->input->text);
+        self::assertSame(['first queued', 'second queued'], $store->input->queue);
+    }
+
+    #[Test]
+    public function queuedRestoreDoesNothingWhenComposerHasText(): void
+    {
+        $store = new AppStore();
+        $store->input = $store->input
+            ->withText('draft')
+            ->enqueue('queued');
+        $screen = new ChatScreen($store);
+        $handler = new ChatInputHandler($screen);
+        $screen->inputText->set('draft');
+
+        self::assertFalse($handler->handleInput(new KeyEvent(Key::Up)));
+        self::assertFalse($handler->handleInput(new KeyEvent('u', ctrl: true)));
+
+        self::assertSame('draft', $screen->inputText->get());
+        self::assertSame('draft', $store->input->text);
+        self::assertSame(['queued'], $store->input->queue);
+    }
+
+    #[Test]
     public function thinkingStatusLineShowsQueueCount(): void
     {
         $store = new AppStore();
@@ -222,6 +348,45 @@ final class ChatScreenTest extends TestCase
 
         self::assertStringContainsString('Λ running', $text);
         self::assertStringContainsString('2 queued', $text);
+    }
+
+    #[Test]
+    public function queuedStatusLineShowsRestoreHintsOnlyWhenComposerIsEmpty(): void
+    {
+        $store = new AppStore();
+        $store->input = $store->input
+            ->enqueue('first queued')
+            ->enqueue('second queued');
+        $screen = new ChatScreen($store);
+
+        $emptyComposerText = self::flatten($screen($this->makeContext($store)));
+
+        self::assertStringContainsString('2 queued', $emptyComposerText);
+        self::assertStringContainsString('↑ undo last', $emptyComposerText);
+        self::assertStringContainsString('^U undo all', $emptyComposerText);
+
+        $screen->inputText->set('draft');
+        $screen->syncInputText();
+
+        $draftComposerText = self::flatten($screen($this->makeContext($store)));
+
+        self::assertStringContainsString('2 queued', $draftComposerText);
+        self::assertStringNotContainsString('↑ undo last', $draftComposerText);
+        self::assertStringNotContainsString('^U undo all', $draftComposerText);
+    }
+
+    #[Test]
+    public function singleQueuedStatusLineShowsOnlyRestoreLastHint(): void
+    {
+        $store = new AppStore();
+        $store->input = $store->input->enqueue('only queued');
+        $screen = new ChatScreen($store);
+
+        $text = self::flatten($screen($this->makeContext($store)));
+
+        self::assertStringContainsString('1 queued', $text);
+        self::assertStringContainsString('↑ undo last', $text);
+        self::assertStringNotContainsString('^U undo all', $text);
     }
 
     private static function flatten(Renderable|string $renderable): string
@@ -258,6 +423,40 @@ final class ChatScreenTest extends TestCase
         return implode('', array_map(static fn($span): string => $span->content, $content->spans));
     }
 
+    private static function paint(Renderable $renderable, int $width, int $height): Buffer
+    {
+        $buffer = Buffer::empty($width, $height);
+
+        Painter::paint(
+            $renderable,
+            new PaintContext(Rect::sized($width, $height), $buffer),
+        );
+
+        return $buffer;
+    }
+
+    private static function findRowContaining(Buffer $buffer, string $needle): int
+    {
+        for ($y = 0; $y < $buffer->height; $y++) {
+            if (str_contains(self::bufferRow($buffer, $y), $needle)) {
+                return $y;
+            }
+        }
+
+        self::fail(sprintf('Unable to find "%s" in painted buffer.', $needle));
+    }
+
+    private static function bufferRow(Buffer $buffer, int $y): string
+    {
+        $line = '';
+
+        for ($x = 0; $x < $buffer->width; $x++) {
+            $line .= $buffer->get($x, $y)->char;
+        }
+
+        return rtrim($line);
+    }
+
     private function conversationWithUserMessages(int $count): ConversationSlice
     {
         $conversation = new ConversationSlice();
@@ -269,12 +468,12 @@ final class ChatScreenTest extends TestCase
         return $conversation;
     }
 
-    private function makeContext(AppStore $store): ScreenContext
+    private function makeContext(AppStore $store, int $width = 120, int $height = 24): ScreenContext
     {
         $scope = $this->createStub(TaskScope::class);
         $navigator = $this->createStub(Navigator::class);
         $mountSystem = new MountSystem($scope);
 
-        return new ScreenContext($scope, Theme::default(), $navigator, $mountSystem);
+        return new ScreenContext($scope, Theme::default(), $navigator, $mountSystem, width: $width, height: $height);
     }
 }

@@ -29,6 +29,14 @@ final class ChatInputHandler implements Focusable, AcceptsInput
 
     public function handleInput(KeyEvent $event): bool
     {
+        if ($event->ctrl && $event->is('u')) {
+            return $this->screen->undoAllQueuedInput();
+        }
+
+        if (!$event->ctrl && !$event->alt && !$event->shift && $event->is(Key::Up)) {
+            return $this->screen->undoLastQueuedInput();
+        }
+
         if ($event->ctrl && ($event->is('p') || $event->is('n'))) {
             return $this->screen->handleScroll($event);
         }

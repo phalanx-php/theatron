@@ -28,6 +28,37 @@ class InputSlice
         return new self($this->text, [...$this->queue, $message]);
     }
 
+    public function lastQueued(): ?string
+    {
+        if ($this->queue === []) {
+            return null;
+        }
+
+        return $this->queue[array_key_last($this->queue)];
+    }
+
+    public function removeLastQueued(): self
+    {
+        if ($this->queue === []) {
+            return $this;
+        }
+
+        $queue = $this->queue;
+        array_pop($queue);
+
+        return new self($this->text, $queue);
+    }
+
+    public function clearQueue(): self
+    {
+        return new self($this->text, []);
+    }
+
+    public function queuedText(): string
+    {
+        return implode("\n\n", $this->queue);
+    }
+
     public function dequeue(): self
     {
         if ($this->queue === []) {

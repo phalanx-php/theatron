@@ -100,8 +100,8 @@ final class TheatronApp
         $registry->activateScreen($this->screens[0]);
         self::rebuildBindings($registry, $navigator);
 
+        $theme = $this->theme;
         $renderDiagnostics = RenderDiagnostics::enabled();
-        $screenCtx = new ScreenContext($scope, $this->theme, $navigator, $mountSystem, $renderDiagnostics);
         $renderCtx = new RenderContext($scope, $this->theme, $mountSystem, $registry, $renderDiagnostics);
         $statusMountOwner = new \stdClass();
 
@@ -125,20 +125,30 @@ final class TheatronApp
 
         $lastActivityPulseAt = 0.0;
         $lastScreenRefreshAt = 0.0;
+        $lastMainWidth = null;
+        $lastMainHeight = null;
 
         $this->stage->onDraw(static function () use (
+            $scope,
+            $theme,
             $mountSystem,
             $navigator,
             $layout,
-            $screenCtx,
             $renderCtx,
+            $renderDiagnostics,
             $statusMountOwner,
             $store,
             &$lastActivityPulseAt,
             &$lastScreenRefreshAt,
+            &$lastMainWidth,
+            &$lastMainHeight,
         ): void {
             $workspace = $navigator->activeWorkspace();
             $now = microtime(true);
+            $mainRegion = $layout->region('main');
+            $mainWidth = $mainRegion->area->width;
+            $mainHeight = $mainRegion->area->height;
+            $viewportChanged = $mainWidth !== $lastMainWidth || $mainHeight !== $lastMainHeight;
 
             if ($store instanceof AppStore) {
                 EffectApprovalReactor::check($store, $navigator);
@@ -166,14 +176,26 @@ final class TheatronApp
                 && !$mountSystem->hasDirtyOwnedSlots($workspace)
                 && !$statusIsDirty
                 && !$overlayIsDirty
+                && !$viewportChanged
             ) {
                 return;
             }
 
-            $mainRegion = $layout->region('main');
-            $renderable = $workspace->isDirty || $workspace->lastResult() === null
+            $screenCtx = new ScreenContext(
+                $scope,
+                $theme,
+                $navigator,
+                $mountSystem,
+                $renderDiagnostics,
+                width: $mainWidth,
+                height: $mainHeight,
+            );
+
+            $renderable = $workspace->isDirty || $workspace->lastResult() === null || $viewportChanged
                 ? $workspace->render($screenCtx)
                 : $workspace->lastResult();
+            $lastMainWidth = $mainWidth;
+            $lastMainHeight = $mainHeight;
 
             self::paintRegion($renderable, $mainRegion, $renderCtx, $workspace);
 

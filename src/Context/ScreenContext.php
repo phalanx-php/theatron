@@ -20,6 +20,8 @@ class ScreenContext
         private(set) Navigator $navigator,
         private(set) MountSystem $mountSystem,
         ?RenderDiagnostics $renderDiagnostics = null,
+        private(set) int $width = 120,
+        private(set) int $height = 24,
     ) {
         $this->renderDiagnostics = $renderDiagnostics ?? new RenderDiagnostics();
     }

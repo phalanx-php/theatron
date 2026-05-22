@@ -6,12 +6,15 @@ namespace Phalanx\Theatron\Tests\Unit\Template\Screen;
 
 use Phalanx\Scope\TaskScope;
 use Phalanx\Theatron\Component\MountSystem;
+use Phalanx\Theatron\Context\RenderContext;
 use Phalanx\Theatron\Context\ScreenContext;
 use Phalanx\Theatron\Contract\Component;
 use Phalanx\Theatron\Contract\Screen;
 use Phalanx\Theatron\Input\Key;
 use Phalanx\Theatron\Input\KeyEvent;
 use Phalanx\Theatron\Navigation\Navigator;
+use Phalanx\Theatron\Reactive\Signal;
+use Phalanx\Theatron\Reactive\SignalRegistry;
 use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Element\ColumnElement;
 use Phalanx\Theatron\Tdom\Element\InputElement;
@@ -23,6 +26,11 @@ use Phalanx\Theatron\Template\AppStore;
 use Phalanx\Theatron\Template\Screen\ChatScreen;
 use Phalanx\Theatron\Template\Screen\DevToolsScreen;
 use Phalanx\Theatron\Template\Screen\LlmRequestDetailScreen;
+use Phalanx\Theatron\Template\Slice\ActivitySlice;
+use Phalanx\Theatron\Template\Slice\AgentRegistrySlice;
+use Phalanx\Theatron\Template\Slice\AgentSummary;
+use Phalanx\Theatron\Template\Slice\ConversationSlice;
+use Phalanx\Theatron\Template\Slice\DevToolsTab;
 use Phalanx\Theatron\Template\Slice\LlmRequestEntry;
 use Phalanx\Theatron\Text\Line;
 use PHPUnit\Framework\Attributes\Test;
@@ -40,15 +48,38 @@ final class DevToolsScreenTest extends TestCase
 
         $result = $screen($this->makeContext($navigator));
 
-        self::assertInstanceOf(RowElement::class, $result);
+        self::assertInstanceOf(ColumnElement::class, $result);
 
         $text = self::flatten($result);
         self::assertStringContainsString('DevTools', $text);
+        self::assertStringContainsString('Metrics', $text);
+        self::assertStringContainsString('Requests', $text);
+        self::assertStringContainsString('Signals', $text);
+        self::assertStringContainsString('Tree', $text);
         self::assertStringContainsString('Store Slices', $text);
         self::assertStringContainsString('Memory (ZMM)', $text);
         self::assertStringContainsString('Runtime', $text);
         self::assertStringContainsString('LLM Requests', $text);
         self::assertStringContainsString('POST /api/chat', $text);
+    }
+
+    #[Test]
+    public function keyboardNavigationChangesTabs(): void
+    {
+        $store = new AppStore();
+        $screen = new DevToolsScreen(
+            $store,
+            new MountSystem($this->createStub(TaskScope::class)),
+            new RecordingNavigator(),
+        );
+
+        self::assertSame(DevToolsTab::Metrics, $store->devtools->activeTab);
+
+        self::assertTrue($screen->handleNormalKey(new KeyEvent(Key::Right)));
+        self::assertSame(DevToolsTab::Requests, $store->devtools->activeTab);
+
+        self::assertTrue($screen->handleNormalKey(new KeyEvent(Key::Left)));
+        self::assertSame(DevToolsTab::Metrics, $store->devtools->activeTab);
     }
 
     #[Test]
@@ -72,6 +103,163 @@ final class DevToolsScreenTest extends TestCase
     }
 
     #[Test]
+    public function requestNavigationIsAvailableOnRequestsTab(): void
+    {
+        $store = new AppStore();
+        $store->devtools = $store->devtools->nextTab();
+        $store->requests = $store->requests
+            ->append($this->request('req-1', '/api/first'))
+            ->append($this->request('req-2', '/api/second'));
+        $screen = new DevToolsScreen(
+            $store,
+            new MountSystem($this->createStub(TaskScope::class)),
+            new RecordingNavigator(),
+        );
+
+        self::assertSame(DevToolsTab::Requests, $store->devtools->activeTab);
+        self::assertTrue($screen->handleNormalKey(new KeyEvent(Key::Up)));
+        self::assertSame(0, $store->requests->focusedIndex);
+    }
+
+    #[Test]
+    public function requestNavigationIsIgnoredOnInspectionTabs(): void
+    {
+        $store = new AppStore();
+        $store->devtools = $store->devtools->nextTab()->nextTab();
+        $store->requests = $store->requests
+            ->append($this->request('req-1', '/api/first'))
+            ->append($this->request('req-2', '/api/second'));
+        $screen = new DevToolsScreen(
+            $store,
+            new MountSystem($this->createStub(TaskScope::class)),
+            new RecordingNavigator(),
+        );
+
+        self::assertSame(DevToolsTab::Signals, $store->devtools->activeTab);
+        self::assertFalse($screen->handleNormalKey(new KeyEvent(Key::Up)));
+        self::assertSame(1, $store->requests->focusedIndex);
+    }
+
+    #[Test]
+    public function signalsTabShowsEmptyStateWhenRegistryDisabled(): void
+    {
+        $store = new AppStore();
+        $store->devtools = $store->devtools->nextTab()->nextTab();
+        $screen = new DevToolsScreen(
+            $store,
+            new MountSystem($this->createStub(TaskScope::class)),
+            new RecordingNavigator(),
+        );
+
+        $text = self::flatten($screen($this->makeContext(new RecordingNavigator())));
+
+        self::assertStringContainsString('Signals', $text);
+        self::assertStringContainsString('No signals registered', $text);
+    }
+
+    #[Test]
+    public function signalsTabShowsRegisteredSignals(): void
+    {
+        $store = new AppStore();
+        $store->devtools = $store->devtools->nextTab()->nextTab();
+        $registry = new SignalRegistry();
+        $signal = new Signal(42);
+        $registry->register($signal, 'apollo.count');
+        $screen = new DevToolsScreen(
+            $store,
+            new MountSystem($this->createStub(TaskScope::class)),
+            new RecordingNavigator(),
+            $registry,
+        );
+
+        $text = self::flatten($screen($this->makeContext(new RecordingNavigator())));
+
+        self::assertStringContainsString('apollo.count', $text);
+        self::assertStringContainsString('42', $text);
+    }
+
+    #[Test]
+    public function signalsTabShowsDisposedSignalLabel(): void
+    {
+        $store = new AppStore();
+        $store->devtools = $store->devtools->nextTab()->nextTab();
+        $registry = new SignalRegistry();
+        $signal = new Signal(0);
+        $registry->register($signal, 'poseidon.depth');
+        $signal->dispose();
+        $screen = new DevToolsScreen(
+            $store,
+            new MountSystem($this->createStub(TaskScope::class)),
+            new RecordingNavigator(),
+            $registry,
+        );
+
+        $text = self::flatten($screen($this->makeContext(new RecordingNavigator())));
+
+        self::assertStringContainsString('poseidon.depth', $text);
+        self::assertStringContainsString('disposed', $text);
+    }
+
+    #[Test]
+    public function treeTabShowsEmptyStateWhenNoComponents(): void
+    {
+        $store = new AppStore();
+        $store->devtools = $store->devtools->nextTab()->nextTab()->nextTab();
+        $screen = new DevToolsScreen(
+            $store,
+            new MountSystem($this->createStub(TaskScope::class)),
+            new RecordingNavigator(),
+        );
+
+        $text = self::flatten($screen($this->makeContext(new RecordingNavigator())));
+
+        self::assertStringContainsString('Component Tree', $text);
+        self::assertStringContainsString('No components mounted', $text);
+    }
+
+    #[Test]
+    public function treeTabShowsMountedComponents(): void
+    {
+        $store = new AppStore();
+        $store->devtools = $store->devtools->nextTab()->nextTab()->nextTab();
+        $scope = $this->createStub(TaskScope::class);
+        $mountSystem = new MountSystem($scope);
+        $mountSystem->mountComponent(DevToolsTreeFixtureComponent::class);
+        $screen = new DevToolsScreen($store, $mountSystem, new RecordingNavigator());
+
+        $text = self::flatten($screen($this->makeContext(new RecordingNavigator(), $mountSystem)));
+
+        self::assertStringContainsString('DevToolsTreeFixtureComponent', $text);
+    }
+
+    #[Test]
+    public function storeTabShowsSliceInfo(): void
+    {
+        $store = new AppStore();
+        $store->devtools = $store->devtools->nextTab()->nextTab()->nextTab()->nextTab();
+        $store->conversation = new ConversationSlice()
+            ->addUserMessage('The agora stands.')
+            ->appendToken('As does the phalanx.');
+        $store->agents = new AgentRegistrySlice()
+            ->register(new AgentSummary(id: 'agent_leonidas', name: 'Leonidas', capabilities: ['tactics']));
+        $store->activity = new ActivitySlice()->updateUsage(100, 200);
+        $screen = new DevToolsScreen(
+            $store,
+            new MountSystem($this->createStub(TaskScope::class)),
+            new RecordingNavigator(),
+        );
+
+        $text = self::flatten($screen($this->makeContext(new RecordingNavigator())));
+
+        self::assertStringContainsString('ConversationSlice', $text);
+        self::assertStringContainsString('AgentRegistrySlice', $text);
+        self::assertStringContainsString('ActivitySlice', $text);
+        self::assertStringContainsString('messages', $text);
+        self::assertStringContainsString('agents', $text);
+        self::assertStringContainsString('total', $text);
+    }
+
+    #[Test]
     public function statusBarRendersRequestControls(): void
     {
         $screen = new DevToolsScreen(
@@ -84,6 +272,8 @@ final class DevToolsScreenTest extends TestCase
 
         self::assertStringContainsString('↑ req', $text);
         self::assertStringContainsString('↓ req', $text);
+        self::assertStringContainsString('← tab', $text);
+        self::assertStringContainsString('→ tab', $text);
         self::assertStringContainsString('Enter detail', $text);
         self::assertStringContainsString('Esc back', $text);
     }
@@ -137,12 +327,20 @@ final class DevToolsScreenTest extends TestCase
         );
     }
 
-    private function makeContext(Navigator $navigator): ScreenContext
+    private function makeContext(Navigator $navigator, ?MountSystem $mountSystem = null): ScreenContext
     {
         $scope = $this->createStub(TaskScope::class);
-        $mountSystem = new MountSystem($scope);
+        $mountSystem ??= new MountSystem($scope);
 
         return new ScreenContext($scope, Theme::default(), $navigator, $mountSystem);
+    }
+}
+
+final class DevToolsTreeFixtureComponent implements Component
+{
+    public function __invoke(RenderContext $ctx): Renderable
+    {
+        return \Phalanx\Theatron\Ui\text('');
     }
 }
 

@@ -9,6 +9,7 @@ use Phalanx\Theatron\State\Store;
 use Phalanx\Theatron\Template\Slice\ActivitySlice;
 use Phalanx\Theatron\Template\Slice\AgentRegistrySlice;
 use Phalanx\Theatron\Template\Slice\ConversationSlice;
+use Phalanx\Theatron\Template\Slice\DevToolsSlice;
 use Phalanx\Theatron\Template\Slice\InputSlice;
 use Phalanx\Theatron\Template\Slice\LlmRequestSlice;
 use Phalanx\Theatron\Template\Slice\SettingsSlice;
@@ -50,6 +51,13 @@ class AppStore extends Store
         }
     }
 
+    public DevToolsSlice $devtools {
+        get => $this->read(DevToolsSlice::class);
+        set {
+            $this->write(DevToolsSlice::class, $value);
+        }
+    }
+
     public SettingsSlice $settings {
         get => $this->read(SettingsSlice::class);
         set {
@@ -71,6 +79,7 @@ class AppStore extends Store
         $this->register(ActivitySlice::class, new ActivitySlice());
         $this->register(InputSlice::class, new InputSlice());
         $this->register(LlmRequestSlice::class, new LlmRequestSlice());
+        $this->register(DevToolsSlice::class, new DevToolsSlice());
         $this->register(SettingsSlice::class, new SettingsSlice());
         $this->register(InputModeSlice::class, new InputModeSlice());
     }

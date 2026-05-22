@@ -160,6 +160,68 @@ final class ModeDispatcherTest extends TestCase
     }
 
     #[Test]
+    public function normalModeHandlerCanHandleDirectionalKeysBeforeFocusNavigation(): void
+    {
+        $focus = new FocusManager();
+
+        $handler = new class () implements NormalModeHandler {
+            public int $callCount = 0;
+
+            public function handleNormalKey(KeyEvent $event): bool
+            {
+                if (!$event->is(Key::Right)) {
+                    return false;
+                }
+
+                $this->callCount++;
+
+                return true;
+            }
+        };
+
+        $focus->register('tabs', $handler);
+        $focus->register('other', new class () implements Focusable {
+        });
+
+        $dispatcher = new ModeDispatcher($focus);
+        $result = $dispatcher->dispatch(new KeyEvent(key: Key::Right));
+
+        self::assertTrue($result);
+        self::assertSame('tabs', $focus->activeName());
+        self::assertSame(1, $handler->callCount);
+    }
+
+    #[Test]
+    public function normalModeHandlerCanHandleEnterBeforeInsertFallback(): void
+    {
+        $focus = new FocusManager();
+
+        $handler = new class () implements NormalModeHandler {
+            public int $callCount = 0;
+
+            public function handleNormalKey(KeyEvent $event): bool
+            {
+                if (!$event->is(Key::Enter)) {
+                    return false;
+                }
+
+                $this->callCount++;
+
+                return true;
+            }
+        };
+
+        $focus->register('detail', $handler);
+
+        $dispatcher = new ModeDispatcher($focus);
+        $result = $dispatcher->dispatch(new KeyEvent(key: Key::Enter));
+
+        self::assertTrue($result);
+        self::assertSame(InputMode::Normal, $dispatcher->mode);
+        self::assertSame(1, $handler->callCount);
+    }
+
+    #[Test]
     public function onModeChangeCallbackFires(): void
     {
         $focus = new FocusManager();

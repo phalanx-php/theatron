@@ -53,6 +53,12 @@ class ModeDispatcher
             return true;
         }
 
+        $active = $this->focus->active();
+
+        if ($active instanceof NormalModeHandler && $active->handleNormalKey($event)) {
+            return true;
+        }
+
         if ($event->is('h') || $event->is(Key::Left)) {
             $this->focus->previous();
             $this->autoModeForActive();
@@ -77,12 +83,6 @@ class ModeDispatcher
             }
 
             return false;
-        }
-
-        $active = $this->focus->active();
-
-        if ($active instanceof NormalModeHandler) {
-            return $active->handleNormalKey($event);
         }
 
         return false;

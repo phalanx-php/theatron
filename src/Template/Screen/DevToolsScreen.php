@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Phalanx\Theatron\Template\Screen;
 
 use Phalanx\Theatron\Binding\Binding;
+use Phalanx\Theatron\Component\ComponentTreeNode;
 use Phalanx\Theatron\Component\MountSystem;
 use Phalanx\Theatron\Context\ScreenContext;
 use Phalanx\Theatron\Contract\DeclaresBindings;
@@ -17,11 +18,15 @@ use Phalanx\Theatron\Input\KeyEvent;
 use Phalanx\Theatron\Input\NormalModeHandler;
 use Phalanx\Theatron\Layout\Size;
 use Phalanx\Theatron\Navigation\Navigator;
+use Phalanx\Theatron\Reactive\SignalRegistry;
 use Phalanx\Theatron\Style\Color;
 use Phalanx\Theatron\Style\Style as TextStyle;
+use Phalanx\Theatron\Styling\Theme;
 use Phalanx\Theatron\Tdom\Renderable;
 use Phalanx\Theatron\Tdom\Style as TdomStyle;
 use Phalanx\Theatron\Template\AppStore;
+use Phalanx\Theatron\Template\Slice\ActivityStatus;
+use Phalanx\Theatron\Template\Slice\DevToolsTab;
 use Phalanx\Theatron\Template\Slice\LlmRequestEntry;
 use Phalanx\Theatron\Text\Line;
 use Phalanx\Theatron\Text\Span;
@@ -36,14 +41,20 @@ class DevToolsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBin
         private(set) AppStore $store,
         private(set) MountSystem $mountSystem,
         private(set) Navigator $navigator,
+        private(set) ?SignalRegistry $registry = null,
     ) {
     }
 
     public function __invoke(ScreenContext $ctx): Renderable
     {
-        return row(
-            column(...$this->leftRows()),
-            column(...$this->requestRows()),
+        return column(
+            self::row(Line::from(
+                Span::styled('  ── DevTools ─────────────────────────────', self::headerStyle()),
+            )),
+            self::row($this->tabs()),
+            self::divider(100),
+            self::blank(),
+            $this->tabContent($ctx->theme),
         );
     }
 
@@ -56,6 +67,12 @@ class DevToolsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBin
                 self::pipe(),
                 Span::styled('↓', TextStyle::new()->fg(Color::indexed(245))),
                 Span::styled(' req', TextStyle::new()->fg(Color::indexed(250))),
+                self::pipe(),
+                Span::styled('←', TextStyle::new()->fg(Color::indexed(245))),
+                Span::styled(' tab', TextStyle::new()->fg(Color::indexed(250))),
+                self::pipe(),
+                Span::styled('→', TextStyle::new()->fg(Color::indexed(245))),
+                Span::styled(' tab', TextStyle::new()->fg(Color::indexed(250))),
                 self::pipe(),
                 Span::styled('Enter', TextStyle::new()->fg(Color::indexed(245))),
                 Span::styled(' detail', TextStyle::new()->fg(Color::indexed(250))),
@@ -73,7 +90,7 @@ class DevToolsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBin
     /** @return list<array{string, Focusable}> */
     public function focusables(): array
     {
-        return [['requests', $this]];
+        return [['devtools', $this]];
     }
 
     /** @return list<Binding> */
@@ -82,6 +99,8 @@ class DevToolsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBin
         return [
             Binding::key(Key::Up)->label('req'),
             Binding::key(Key::Down)->label('req'),
+            Binding::key(Key::Left)->label('tab'),
+            Binding::key(Key::Right)->label('tab'),
             Binding::key(Key::Enter)->label('detail'),
             Binding::key(Key::Escape)->back()->label('back'),
         ];
@@ -89,19 +108,31 @@ class DevToolsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBin
 
     public function handleNormalKey(KeyEvent $event): bool
     {
-        if ($event->is(Key::Up)) {
+        if ($event->is(Key::Left)) {
+            $this->store->devtools = $this->store->devtools->prevTab();
+
+            return true;
+        }
+
+        if ($event->is(Key::Right)) {
+            $this->store->devtools = $this->store->devtools->nextTab();
+
+            return true;
+        }
+
+        if ($event->is(Key::Up) && $this->requestsVisible()) {
             $this->store->requests = $this->store->requests->focusUp();
 
             return true;
         }
 
-        if ($event->is(Key::Down)) {
+        if ($event->is(Key::Down) && $this->requestsVisible()) {
             $this->store->requests = $this->store->requests->focusDown();
 
             return true;
         }
 
-        if ($event->is(Key::Enter) && $this->store->requests->focused() !== null) {
+        if ($event->is(Key::Enter) && $this->requestsVisible() && $this->store->requests->focused() !== null) {
             $this->store->requests = $this->store->requests->resetDetailScroll();
             $this->navigator->go(LlmRequestDetailScreen::class);
 
@@ -149,6 +180,13 @@ class DevToolsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBin
         return self::row(Line::plain(''));
     }
 
+    private static function divider(int $width): Renderable
+    {
+        return self::row(Line::from(
+            Span::styled(str_repeat('─', $width), TextStyle::new()->fg(Color::indexed(236))),
+        ));
+    }
+
     private static function pipe(): Span
     {
         return Span::styled('  │  ', TextStyle::new()->fg(Color::indexed(238)));
@@ -177,17 +215,59 @@ class DevToolsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBin
         return round($bytes / 1048576, 1) . ' MB';
     }
 
+    private static function statusLabel(ActivityStatus $status): string
+    {
+        return match ($status) {
+            ActivityStatus::Idle => 'Idle',
+            ActivityStatus::Running => 'Running',
+            ActivityStatus::AwaitingApproval => 'Awaiting Approval',
+            ActivityStatus::Completed => 'Completed',
+            ActivityStatus::Failed => 'Failed',
+            ActivityStatus::Cancelled => 'Cancelled',
+        };
+    }
+
+    private function tabs(): Line
+    {
+        $spans = [Span::plain('  ')];
+
+        foreach (DevToolsTab::cases() as $tab) {
+            $style = $tab === $this->store->devtools->activeTab
+                ? TextStyle::new()->fg(Color::indexed(255))->bold()->underline()
+                : TextStyle::new()->fg(Color::indexed(245));
+            $spans[] = Span::styled(' ' . $tab->value . ' ', $style);
+        }
+
+        return Line::from(...$spans);
+    }
+
+    private function tabContent(Theme $theme): Renderable
+    {
+        return match ($this->store->devtools->activeTab) {
+            DevToolsTab::Requests => column(...$this->requestRows()),
+            DevToolsTab::Signals => column(...$this->signalRows($theme)),
+            DevToolsTab::Tree => column(...$this->treeRows($theme)),
+            DevToolsTab::Store => column(...$this->storeRows()),
+            DevToolsTab::Metrics => row(
+                column(...$this->metricRows()),
+                column(...$this->requestRows()),
+            ),
+        };
+    }
+
+    private function requestsVisible(): bool
+    {
+        return $this->store->devtools->activeTab === DevToolsTab::Metrics
+            || $this->store->devtools->activeTab === DevToolsTab::Requests;
+    }
+
     /** @return list<Renderable> */
-    private function leftRows(): array
+    private function metricRows(): array
     {
         $conversation = $this->store->conversation;
         $activity = $this->store->activity;
         $input = $this->store->input;
         $rows = [
-            self::row(Line::from(
-                Span::styled('  ── DevTools ─────────────────────────────', self::headerStyle()),
-            )),
-            self::blank(),
             self::row(Line::from(Span::styled('  Store Slices', self::headerStyle()))),
             self::kv(
                 'repl.convo',
@@ -231,6 +311,7 @@ class DevToolsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBin
         $rows[] = self::kv('os', PHP_OS . ' ' . php_uname('m'));
         $rows[] = self::kv('pid', (string) getmypid());
         $rows[] = self::kv('components', (string) count($this->mountSystem->mounted()));
+        $rows[] = self::kv('signals', (string) ($this->registry?->count() ?? 0));
 
         return $rows;
     }
@@ -254,5 +335,101 @@ class DevToolsScreen implements Screen, HasStatusBar, HasFocusables, DeclaresBin
         }
 
         return $rows;
+    }
+
+    /** @return list<Renderable> */
+    private function signalRows(Theme $theme): array
+    {
+        $snapshots = $this->registry?->snapshot() ?? [];
+        $rows = [
+            self::row(Line::from(
+                Span::styled('  Signals', self::headerStyle()),
+                Span::styled('  Value', $theme->subtle->bold()),
+                Span::styled('  Subs', $theme->subtle->bold()),
+            )),
+            self::blank(),
+        ];
+
+        foreach ($snapshots as $snapshot) {
+            $nameStyle = $snapshot->isDisposed ? $theme->muted : $theme->accent;
+            $valueStyle = $snapshot->isDisposed ? $theme->muted : $theme->bright;
+            $state = $snapshot->isDisposed ? ' disposed' : '';
+
+            $rows[] = self::row(Line::from(
+                Span::styled("  {$snapshot->label}", $nameStyle),
+                Span::styled(' = ', $theme->subtle),
+                Span::styled($snapshot->value, $valueStyle),
+                Span::styled(" ({$snapshot->subscriberCount}){$state}", $theme->muted),
+            ));
+        }
+
+        if ($snapshots === []) {
+            $rows[] = self::row(Line::from(Span::styled('  No signals registered', self::dimStyle())));
+        }
+
+        return $rows;
+    }
+
+    /** @return list<Renderable> */
+    private function treeRows(Theme $theme): array
+    {
+        $nodes = [];
+
+        foreach ($this->mountSystem->mounted() as $mounted) {
+            $nodes[] = new ComponentTreeNode(
+                class: $mounted->component::class,
+                signalCount: $mounted->signalCount,
+                subscriptionCount: $mounted->subscriptionCount,
+            );
+        }
+
+        $rows = [
+            self::row(Line::from(Span::styled('  Component Tree', self::headerStyle()))),
+            self::blank(),
+        ];
+
+        foreach ($nodes as $node) {
+            $pos = strrpos($node->class, '\\');
+            $shortClass = $pos !== false ? substr($node->class, $pos + 1) : $node->class;
+
+            $rows[] = self::row(Line::from(
+                Span::styled("  {$shortClass}", $theme->accent->bold()),
+                Span::styled(" sig:{$node->signalCount}", $theme->muted),
+                Span::styled(" sub:{$node->subscriptionCount}", $theme->muted),
+            ));
+        }
+
+        if ($nodes === []) {
+            $rows[] = self::row(Line::from(Span::styled('  No components mounted', self::dimStyle())));
+        }
+
+        return $rows;
+    }
+
+    /** @return list<Renderable> */
+    private function storeRows(): array
+    {
+        $conversation = $this->store->conversation;
+        $agents = $this->store->agents;
+        $activity = $this->store->activity;
+
+        return [
+            self::row(Line::from(Span::styled('  Store Slices', self::headerStyle()))),
+            self::blank(),
+            self::row(Line::from(Span::styled('  ConversationSlice', self::headerStyle()))),
+            self::kv('messages', (string) count($conversation->messages)),
+            self::kv('streaming', $conversation->isStreaming ? 'yes' : 'no'),
+            self::kv('thinking', (string) mb_strlen($conversation->thinkingBuffer)),
+            self::blank(),
+            self::row(Line::from(Span::styled('  AgentRegistrySlice', self::headerStyle()))),
+            self::kv('agents', (string) count($agents->agents)),
+            self::kv('active', $agents->activeAgentId ?? 'none'),
+            self::blank(),
+            self::row(Line::from(Span::styled('  ActivitySlice', self::headerStyle()))),
+            self::kv('status', self::statusLabel($activity->status)),
+            self::kv('in', (string) $activity->inputTokens),
+            self::kv('out', (string) $activity->outputTokens),
+            self::kv('total', (string) $activity->totalTokens),
+        ];
     }
 }

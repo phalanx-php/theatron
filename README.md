@@ -364,8 +364,8 @@ The bundled template app is the current REPL-style reference:
 
 - `ChatScreen` -- conversation history, active exchange, input composer, queueing,
   thinking status, and bottom controls.
-- `DevToolsScreen` -- store slices, runtime metrics, GC/runtime details, and LLM
-  request list.
+- `DevToolsScreen` -- Metrics, Requests, Signals, Tree, and Store tabs for runtime
+  inspection.
 - `LlmRequestDetailScreen` -- request/response body preview with JSON highlighting.
 - `SettingsScreen` -- tabbed General/Tools/MCP/Model/Display settings backed by
   `SettingsSlice`.

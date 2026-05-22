@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Phalanx\Theatron\Tests\Unit\Navigation;
 
+use Phalanx\Scope\TaskScope;
 use Phalanx\Theatron\Component\MountedComponent;
 use Phalanx\Theatron\Component\MountedScreen;
 use Phalanx\Theatron\Component\MountSystem;
@@ -234,6 +235,49 @@ final class WorkspaceNavigatorTest extends TestCase
         $nav->go(ZeusScreen::class);
 
         self::assertSame(ZeusScreen::class, $nav->active());
+    }
+
+    #[Test]
+    public function goMarksRevisitedWorkspaceDirtyForRepaint(): void
+    {
+        $system = $this->makeSystem();
+        $nav = new WorkspaceNavigator($system, ZeusScreen::class);
+        $workspace = $nav->activeWorkspace();
+
+        $workspace->render(new ScreenContext(
+            $this->createStub(TaskScope::class),
+            Theme::default(),
+            $nav,
+            $system,
+        ));
+        self::assertFalse($workspace->isDirty);
+
+        $nav->go(ApolloScreen::class);
+        $nav->go(ZeusScreen::class);
+
+        self::assertSame($workspace, $nav->activeWorkspace());
+        self::assertTrue($workspace->isDirty);
+    }
+
+    #[Test]
+    public function backMarksRestoredWorkspaceDirtyForRepaint(): void
+    {
+        $system = $this->makeSystem();
+        $nav = new WorkspaceNavigator($system, ZeusScreen::class);
+        $workspace = $nav->activeWorkspace();
+
+        $workspace->render(new ScreenContext(
+            $this->createStub(TaskScope::class),
+            Theme::default(),
+            $nav,
+            $system,
+        ));
+
+        $nav->go(ApolloScreen::class);
+        self::assertTrue($nav->back());
+
+        self::assertSame($workspace, $nav->activeWorkspace());
+        self::assertTrue($workspace->isDirty);
     }
 
     // --- E.03 Overlay lifecycle ---------------------------------------------

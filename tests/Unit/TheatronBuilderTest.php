@@ -127,6 +127,21 @@ final class TheatronBuilderTest extends TestCase
     }
 
     #[Test]
+    public function defaultStageConfigLetsBindingsOwnExitBehavior(): void
+    {
+        $app = Theatron::app()
+            ->screens([OlympusScreen::class])
+            ->build();
+
+        self::assertTrue($app->stage->config->handleInput);
+        self::assertFalse($app->stage->config->defaultExitHandler);
+        self::assertCount(1, $app->globalBindings());
+        self::assertSame('c', $app->globalBindings()[0]->key);
+        self::assertTrue($app->globalBindings()[0]->ctrl);
+        self::assertTrue($app->globalBindings()[0]->action?->isQuit());
+    }
+
+    #[Test]
     public function defaultScreenIsFirstInList(): void
     {
         $app = Theatron::app()
@@ -161,13 +176,16 @@ final class TheatronBuilderTest extends TestCase
     }
 
     #[Test]
-    public function noBindingsByDefault(): void
+    public function defaultGlobalBindingsIncludeQuit(): void
     {
         $app = Theatron::app()
             ->screens([OlympusScreen::class])
             ->build();
 
-        self::assertSame([], $app->globalBindings());
+        self::assertCount(1, $app->globalBindings());
+        self::assertSame('c', $app->globalBindings()[0]->key);
+        self::assertTrue($app->globalBindings()[0]->ctrl);
+        self::assertTrue($app->globalBindings()[0]->action?->isQuit());
     }
 
     #[Test]
@@ -269,7 +287,10 @@ final class TheatronBuilderTest extends TestCase
             ->screens([OlympusScreen::class])
             ->globalBindings([$binding]);
 
-        self::assertSame([$binding], $builder->registeredGlobalBindings());
+        self::assertCount(2, $builder->registeredGlobalBindings());
+        self::assertSame($binding, $builder->registeredGlobalBindings()[0]);
+        self::assertSame('c', $builder->registeredGlobalBindings()[1]->key);
+        self::assertTrue($builder->registeredGlobalBindings()[1]->ctrl);
     }
 
     #[Test]

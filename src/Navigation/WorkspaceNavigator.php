@@ -45,6 +45,8 @@ final class WorkspaceNavigator implements Navigator
         if (!isset($this->workspaces[$screen])) {
             $this->workspaces[$screen] = $this->mountSystem->mountScreen($screen);
         }
+
+        $this->workspaces[$screen]->markDirty();
     }
 
     public function back(): bool
@@ -56,6 +58,7 @@ final class WorkspaceNavigator implements Navigator
         }
 
         $this->activeScreen = $screen;
+        $this->workspaces[$this->activeScreen]->markDirty();
 
         return true;
     }

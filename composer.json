@@ -61,7 +61,7 @@
         "ext-pcntl": "*",
         "ext-mbstring": "*",
         "phalanx-php/aegis": "dev-main as 0.6.0",
-        "phalanx-php/archon": "@dev",
+        "phalanx-php/archon": "dev-main as 0.6.0",
         "phalanx-php/athena": "dev-main as 0.6.0",
         "phalanx-php/hermes": "dev-main as 0.6.0",
         "phalanx-php/hydra": "dev-main as 0.6.0",

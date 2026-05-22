@@ -40,7 +40,8 @@ final class TheatronBuilder
 
     public function __construct(private(set) AppContext $context)
     {
-        $this->stageConfig = new StageConfig(handleInput: true);
+        $this->globalBindings = self::withDefaultGlobalBindings([]);
+        $this->stageConfig = new StageConfig(handleInput: true, defaultExitHandler: false);
     }
 
     /** @param class-string<Store> $store */
@@ -66,7 +67,7 @@ final class TheatronBuilder
     /** @param list<Binding> $bindings */
     public function globalBindings(array $bindings): self
     {
-        $this->globalBindings = $bindings;
+        $this->globalBindings = self::withDefaultGlobalBindings($bindings);
 
         return $this;
     }
@@ -157,6 +158,33 @@ final class TheatronBuilder
     public function registeredProviders(): array
     {
         return $this->providers;
+    }
+
+    /** @param list<Binding> $bindings */
+    private static function hasBinding(array $bindings, Binding $needle): bool
+    {
+        return array_any(
+            $bindings,
+            static fn(Binding $binding): bool => $binding->key === $needle->key
+                && $binding->ctrl === $needle->ctrl
+                && $binding->alt === $needle->alt
+                && $binding->shift === $needle->shift,
+        );
+    }
+
+    /**
+     * @param list<Binding> $bindings
+     * @return list<Binding>
+     */
+    private static function withDefaultGlobalBindings(array $bindings): array
+    {
+        $quit = Binding::ctrl('c')->quit()->label('quit');
+
+        if (self::hasBinding($bindings, $quit)) {
+            return $bindings;
+        }
+
+        return [...$bindings, $quit];
     }
 
     /** @return list<ServiceBundle> */
